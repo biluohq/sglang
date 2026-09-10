@@ -6,12 +6,18 @@ import argparse
 import heapq
 import json
 import math
+import platform
 import random
+import re
 import statistics
+import subprocess
 import sys
 import unittest
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock
 
 
 @dataclass
@@ -418,6 +424,142 @@ class TestBeamKVCPU(unittest.TestCase):
             traffic_model(simulate_tree(1, 1), tile=0)
 
 
+class TestBenchmarkHarness(unittest.TestCase):
+    def fake_cuda(self):
+        torch = MagicMock()
+        torch.cuda.graph.side_effect = lambda *a, **kw: nullcontext()
+        torch.cuda.Event.side_effect = lambda **kw: Mock(
+            elapsed_time=Mock(return_value=1.0)
+        )
+        return torch
+
+    def test_warm_graph_averages_replay_batch(self):
+        torch, call = self.fake_cuda(), Mock()
+        result = measure_cuda(torch, call, 2, 3, None, "graph", 8)
+        self.assertEqual(call.call_count, 10)
+        self.assertEqual(result["calls_per_sample"], 8)
+        self.assertEqual(result["median_us"], 125.0)
+        self.assertEqual(torch.cuda.CUDAGraph.return_value.replay.call_count, 4)
+        for args in torch.cuda.Event.call_args_list:
+            self.assertEqual(args.kwargs, {"enable_timing": True})
+
+    def test_scrub_is_outside_single_call_graph(self):
+        torch, call, scrub = self.fake_cuda(), Mock(), Mock()
+        operations = Mock()
+        operations.attach_mock(torch.cuda.CUDAGraph.return_value.replay, "replay")
+        operations.attach_mock(scrub.add_, "scrub")
+        result = measure_cuda(torch, call, 2, 3, scrub, "graph", 64)
+        self.assertEqual(call.call_count, 3)
+        self.assertEqual(result["calls_per_sample"], 1)
+        self.assertEqual(result["median_us"], 1000.0)
+        self.assertEqual(
+            [call[0] for call in operations.mock_calls],
+            ["replay", "scrub", "replay", "scrub", "replay", "scrub", "replay"],
+        )
+
+    def test_eager_does_not_capture(self):
+        torch, call = self.fake_cuda(), Mock()
+        result = measure_cuda(torch, call, 2, 3, None, "eager", 64)
+        self.assertEqual(call.call_count, 5)
+        self.assertEqual(result["sample_unit"], "eager_call")
+        torch.cuda.CUDAGraph.assert_not_called()
+        torch.cuda.graph.assert_not_called()
+
+    def test_invalid_timing_parameters(self):
+        for kwargs in (
+            {"warmup": 0},
+            {"repeats": 0},
+            {"graph_batch": 0},
+            {"execution": "auto"},
+        ):
+            parameters = {"warmup": 1, "repeats": 1, "scrub": None} | kwargs
+            with self.assertRaises(ValueError):
+                measure_cuda(self.fake_cuda(), Mock(), **parameters)
+
+    def test_summary_uses_best_split_in_same_execution(self):
+        rows = [
+            {
+                "method": "B_pool_gather",
+                "splits": s,
+                "median_us": duration,
+                "execution": mode,
+                "scope": "total",
+            }
+            for s, duration, mode in (
+                (1, 20, "graph"),
+                (4, 40, "graph"),
+                (1, 100, "eager"),
+            )
+        ]
+        rows.append(
+            {
+                "method": "C_shared_scan",
+                "group_beams": 8,
+                "tile": 64,
+                "median_us": 10,
+                "execution": "graph",
+                "scope": "total",
+            }
+        )
+        summary = summarize_timings(rows)
+        self.assertEqual(len(summary), 1)
+        self.assertEqual(summary[0]["baseline_splits"], 1)
+        self.assertEqual(summary[0]["observed_speedup"], 2.0)
+
+    def test_inspection_restores_jit_method(self):
+        kernel = SimpleNamespace(
+            name="test",
+            hash="abc",
+            metadata=SimpleNamespace(
+                target="sm70", shared=1024, num_warps=4, num_stages=1
+            ),
+            asm={"ptx": "fma.rn.f32; mma.sync.aligned;"},
+            n_regs=32,
+            n_spills=0,
+        )
+        jit = SimpleNamespace(run=Mock(return_value=kernel))
+        original = jit.run
+        data = inspect_compilation(lambda: jit.run(grid=(2, 8, 1)), [jit])
+        self.assertIs(jit.run, original)
+        self.assertEqual(data[0]["grid"], [2, 8, 1])
+        self.assertEqual(data[0]["ptx_mma_instruction_count"], 1)
+        self.assertEqual(data[0]["ptx_fma_instruction_count"], 1)
+        self.assertEqual(data[0]["registers_per_thread"], 32)
+        jit.run.side_effect = RuntimeError("compilation failed")
+        with self.assertRaisesRegex(RuntimeError, "compilation failed"):
+            inspect_compilation(lambda: jit.run(), [jit])
+        self.assertIs(jit.run, original)
+
+    def test_matrix_is_staged_and_supports_selection(self):
+        args = SimpleNamespace(
+            preset="quick",
+            case=None,
+            output_dir="/tmp/beam-matrix-test",
+            graph_batch=32,
+            repeats=10,
+            warmup=3,
+        )
+        commands = matrix_commands(args)
+        self.assertEqual(len(commands), 12)
+        self.assertEqual(len({case["output"] for case in commands}), 12)
+        self.assertIn("--dtype", commands[0]["command"])
+        self.assertIn("float16", commands[0]["command"])
+        args.case = ["timing_control"]
+        self.assertEqual(len(matrix_commands(args)), 1)
+        args.case = ["missing"]
+        with self.assertRaises(ValueError):
+            matrix_commands(args)
+        self.assertGreater(len(matrix_cases("full")), len(matrix_cases("quick")))
+
+    def test_padded_geometry_counts_real_blocks(self):
+        args = SimpleNamespace(q_heads=8, kv_heads=8, beams=8, steps=128)
+        snapshot = simulate_tree(8, 128)
+        geometry = padded_geometry(args, snapshot, 8, 64)
+        self.assertEqual(geometry["block_m"], 16)
+        self.assertEqual(geometry["blocks_per_request"], 8)
+        self.assertEqual(geometry["padded_pair_ratio"], 3.0)
+
+
 def load_cuda():
     try:
         import torch
@@ -452,12 +594,11 @@ def prepare_gpu_case(args, torch):
             args.kv_heads,
             args.scatter_factor,
             args.scan_spacing,
-            args.splits,
         )
         < 1
     ):
         raise ValueError(
-            "requests, heads, spacing, scatter factor, and splits must be positive"
+            "requests, heads, spacing, and scatter factor must be positive"
         )
     if args.q_heads % args.kv_heads:
         raise ValueError("q_heads must be divisible by kv_heads")
@@ -579,17 +720,17 @@ def shared_runner(args, case, shared_fwd, group, tile):
     return run, total
 
 
-def gather_runner(args, case, layout, torch, gather_fwd):
+def gather_runner(args, case, layout, torch, gather_fwd, split_count):
     q = case["q"]
     rows, heads, dim = q.shape
     indptr = torch.arange(rows + 1, dtype=torch.int32, device=q.device) * args.steps
     indices = layout["paths"].flatten().clone()
-    splits = torch.full((rows,), args.splits, dtype=torch.int32, device=q.device)
+    splits = torch.full((rows,), split_count, dtype=torch.int32, device=q.device)
     partial = torch.empty(
-        (rows, heads, args.splits, dim), dtype=torch.float32, device=q.device
+        (rows, heads, split_count, dim), dtype=torch.float32, device=q.device
     )
     partial_lse = torch.empty(
-        (rows, heads, args.splits), dtype=torch.float32, device=q.device
+        (rows, heads, split_count), dtype=torch.float32, device=q.device
     )
     output = torch.empty_like(q)
 
@@ -607,7 +748,7 @@ def gather_runner(args, case, layout, torch, gather_fwd):
             partial,
             partial_lse,
             splits,
-            args.splits,
+            split_count,
             1.0 / math.sqrt(dim),
             1.0,
             1.0,
@@ -763,82 +904,245 @@ def verify_gpu(args, case, torch, shared_fwd, baselines):
     }
 
 
-def measure_cuda(torch, call, warmup, repeats, scrub):
+def measure_cuda(
+    torch, call, warmup, repeats, scrub, execution="graph", graph_batch=64
+):
+    if min(warmup, repeats, graph_batch) < 1:
+        raise ValueError("warmup, repeats, and graph_batch must be positive")
+    if execution not in ("eager", "graph"):
+        raise ValueError("execution must be eager or graph")
     for _ in range(warmup):
         call()
     torch.cuda.synchronize()
-    try:
-        probe = torch.cuda.Event(enable_timing=True, external=True)
-    except TypeError:
-        probe = None
-
-    if probe is None:
-        events = [
-            (
-                torch.cuda.Event(enable_timing=True),
-                torch.cuda.Event(enable_timing=True),
-            )
-            for _ in range(repeats)
-        ]
-        for start, end in events:
-            if scrub is not None:
-                scrub.add_(1)
-            start.record()
-            call()
-            end.record()
-    else:
-        events = [
-            (
-                torch.cuda.Event(enable_timing=True, external=True),
-                torch.cuda.Event(enable_timing=True, external=True),
-            )
-            for _ in range(repeats)
-        ]
+    calls_per_sample = 1
+    measured_call = call
+    if execution == "graph":
+        # Scrubbing once before a batch would leave all but the first call warm.
+        calls_per_sample = graph_batch if scrub is None else 1
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
         graph = torch.cuda.CUDAGraph()
-        # Event nodes keep Python submission gaps outside the measured intervals.
-        with torch.cuda.graph(graph):
-            for start, end in events:
-                if scrub is not None:
-                    scrub.add_(1)
-                start.record()
+        with torch.cuda.graph(graph, stream=stream):
+            for _ in range(calls_per_sample):
                 call()
-                end.record()
-        graph.replay()
+        torch.cuda.current_stream().wait_stream(stream)
+        measured_call = graph.replay
+        measured_call()
+        torch.cuda.synchronize()
+    events = [
+        (
+            torch.cuda.Event(enable_timing=True),
+            torch.cuda.Event(enable_timing=True),
+        )
+        for _ in range(repeats)
+    ]
+    for start, end in events:
+        if scrub is not None:
+            scrub.add_(1)
+        start.record()
+        measured_call()
+        end.record()
     torch.cuda.synchronize()
-    samples = sorted(start.elapsed_time(end) * 1000.0 for start, end in events)
+    samples = sorted(
+        start.elapsed_time(end) * 1000.0 / calls_per_sample for start, end in events
+    )
     return {
+        "execution": execution,
+        "calls_per_sample": calls_per_sample,
+        "sample_count": repeats,
+        "sample_unit": "per_call_average_of_replay"
+        if execution == "graph"
+        else "eager_call",
+        "host_submission": (
+            "one replay submission gap amortized over calls_per_sample"
+            if execution == "graph"
+            else "Python dispatch gaps may be included in the GPU event interval"
+        ),
         "median_us": statistics.median(samples),
         "p10_us": samples[int((len(samples) - 1) * 0.1)],
         "p90_us": samples[int((len(samples) - 1) * 0.9)],
     }
 
 
+def summarize_timings(timings):
+    summaries = []
+    for execution in sorted({row["execution"] for row in timings}):
+        for scope in sorted({row["scope"] for row in timings}):
+            rows = [
+                r
+                for r in timings
+                if r["execution"] == execution and r["scope"] == scope
+            ]
+            for method in ("A_scattered_gather", "B_pool_gather"):
+                gather = [r for r in rows if r["method"] == method]
+                shared = [r for r in rows if r["method"] == "C_shared_scan"]
+                if not gather or not shared:
+                    continue
+                baseline = min(gather, key=lambda r: r["median_us"])
+                best = min(shared, key=lambda r: r["median_us"])
+                summaries.append(
+                    {
+                        "execution": execution,
+                        "scope": scope,
+                        "baseline": method,
+                        "baseline_splits": baseline["splits"],
+                        "baseline_median_us": baseline["median_us"],
+                        "shared_group_beams": best["group_beams"],
+                        "shared_tile": best["tile"],
+                        "shared_median_us": best["median_us"],
+                        "observed_speedup": baseline["median_us"] / best["median_us"]
+                        if best["median_us"] > 0
+                        else None,
+                    }
+                )
+    return summaries
+
+
+def inspect_compilation(call, jit_functions, dump_dir=None):
+    captured = []
+    originals = []
+    for jit in jit_functions:
+        previous = jit.__dict__.get("run")
+        original = jit.run
+
+        def capture(*values, _original=original, **kwargs):
+            kernel = _original(*values, **kwargs)
+            captured.append((kernel, kwargs.get("grid")))
+            return kernel
+
+        originals.append((jit, previous))
+        jit.run = capture
+    try:
+        call()
+    finally:
+        for jit, previous in originals:
+            if previous is None:
+                del jit.run
+            else:
+                jit.run = previous
+    result = []
+    for kernel, grid in captured:
+        metadata = kernel.metadata
+        ptx = kernel.asm.get("ptx", "")
+        info = {
+            "name": kernel.name,
+            "hash": kernel.hash,
+            "grid": list(grid) if isinstance(grid, tuple) else str(grid),
+            "target": str(metadata.target),
+            "registers_per_thread": getattr(kernel, "n_regs", None),
+            "spills_reported_by_triton": getattr(kernel, "n_spills", None),
+            "shared_memory_bytes": metadata.shared,
+            "num_warps": metadata.num_warps,
+            "num_stages": getattr(metadata, "num_stages", None),
+            "ptx_mma_instruction_count": len(
+                re.findall(r"\b(?:mma\.sync|wgmma\.mma_async|tcgen05\.mma)\b", ptx)
+            ),
+            "ptx_fma_instruction_count": len(re.findall(r"\bfma\.", ptx)),
+        }
+        if dump_dir is not None:
+            stem = re.sub(r"[^a-zA-Z0-9_.-]", "_", f"{kernel.name}-{kernel.hash}")
+            files = {}
+            for extension in ("ptx", "ttgir", "cubin", "sass"):
+                try:
+                    code = kernel.asm[extension]
+                except Exception as error:
+                    info[f"{extension}_unavailable"] = str(error)
+                    continue
+                target = dump_dir / f"{stem}.{extension}"
+                if not target.exists():
+                    if isinstance(code, bytes):
+                        target.write_bytes(code)
+                    else:
+                        target.write_text(code)
+                files[extension] = str(target)
+            info["files"] = files
+        result.append(info)
+    if not result:
+        raise RuntimeError(
+            "no Triton launches captured; compiler inspection is unavailable"
+        )
+    return result
+
+
+def gpu_environment(torch):
+    props = torch.cuda.get_device_properties(torch.cuda.current_device())
+    try:
+        driver = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        driver = f"unavailable: {error}"
+    return {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "torch_cuda": torch.version.cuda,
+        "compute_capability": list(torch.cuda.get_device_capability()),
+        "multiprocessor_count": props.multi_processor_count,
+        "total_memory_bytes": props.total_memory,
+        "driver_query": driver,
+    }
+
+
+def padded_geometry(args, snapshot, group, tile):
+    gqa = args.q_heads // args.kv_heads
+    block_m = max(16, 1 << (group * gqa - 1).bit_length())
+    groups = math.ceil(args.beams / group)
+    slots = math.ceil(len(snapshot.slots) / tile) * tile
+    valid_pairs = args.beams * args.steps * gqa
+    return {
+        "group_beams": group,
+        "tile": tile,
+        "block_m": block_m,
+        "blocks_per_request": groups * args.kv_heads,
+        "padded_slots": slots,
+        "padded_pair_ratio": groups * block_m * slots / valid_pairs
+        if valid_pairs
+        else None,
+    }
+
+
 def run_gpu(args):
-    if min(args.warmup, args.repeats) < 1 or args.eviction_mib < 1:
-        raise ValueError("warmup, repeats, and eviction_mib must be positive")
+    if (
+        min(
+            args.warmup, args.repeats, args.graph_batch, args.eviction_mib, *args.splits
+        )
+        < 1
+    ):
+        raise ValueError(
+            "warmup, repeats, graph_batch, eviction_mib, and splits must be positive"
+        )
     if args.mode == "benchmark" and args.steps < 1:
         raise ValueError(
             "benchmark requires steps > 0; use gpu-check for empty history"
         )
     torch, triton, shared_fwd, gather_fwd = load_cuda()
+    dump_dir = Path(args.dump_dir) if args.dump_dir else None
+    if dump_dir is not None:
+        dump_dir.mkdir(parents=True, exist_ok=True)
     case = prepare_gpu_case(args, torch)
-    baselines = (
-        {
-            name: gather_runner(args, case, case[layout], torch, gather_fwd)
-            for name, layout in (
-                ("A_scattered_gather", "scattered"),
-                ("B_pool_gather", "dense"),
-            )
-        }
-        if args.steps
-        else {}
-    )
+    baselines = {}
+    if args.steps:
+        for name, layout in (
+            ("A_scattered_gather", "scattered"),
+            ("B_pool_gather", "dense"),
+        ):
+            for split in args.splits:
+                baseline = gather_runner(
+                    args, case, case[layout], torch, gather_fwd, split
+                )
+                baseline.update(method=name, splits=split)
+                baselines[f"{name}_split{split}"] = baseline
     correctness = verify_gpu(args, case, torch, shared_fwd, baselines)
     result = {
         "kind": "measured_cuda" if args.mode == "benchmark" else "cuda_correctness",
         "torch": torch.__version__,
         "triton": triton.__version__,
         "gpu": torch.cuda.get_device_name(),
+        "environment": gpu_environment(torch),
         "parameters": vars(args),
         "correctness": correctness,
         "source_allocator_state": case["source_trace"],
@@ -847,8 +1151,9 @@ def run_gpu(args):
             "no runtime compaction or VMM is measured"
         ),
         "timing_note": (
-            "CUDA Graph replay with external event nodes when supported; "
-            "otherwise batched CUDA event timing; excludes scrub intervals"
+            "explicit eager and graph results using ordinary CUDA events; "
+            "warm graphs amortize one replay submission over graph_batch calls; "
+            "scrub graphs contain one call and retain replay submission overhead"
         ),
         "scan_note": (
             "KV loads skip globally invalid slots; "
@@ -870,18 +1175,54 @@ def run_gpu(args):
             "shared_valid_slots": case["dense"]["valid"].numel(),
             "shared_output_and_lse": case["out"].numel() * case["out"].element_size()
             + case["lse"].numel() * 4,
-            "gather_workspace_per_method": next(iter(baselines.values()))[
-                "workspace_bytes"
-            ]
-            if baselines
-            else 0,
-            "gather_metadata_per_method": next(iter(baselines.values()))[
-                "metadata_bytes"
-            ]
-            if baselines
-            else 0,
+            "gather_workspace_by_variant": {
+                name: b["workspace_bytes"] for name, b in baselines.items()
+            },
+            "gather_metadata_by_variant": {
+                name: b["metadata_bytes"] for name, b in baselines.items()
+            },
         },
     }
+    from sglang.kernels.ops.attention import beam_decode_attention, decode_attention
+
+    gather_jits = (
+        decode_attention._fwd_kernel_stage1,
+        decode_attention._fwd_grouped_kernel_stage1,
+        decode_attention._fwd_kernel_stage2,
+    )
+    compiled = []
+    for baseline in baselines.values():
+        compiled.append(
+            {
+                "method": baseline["method"],
+                "splits": baseline["splits"],
+                "kernels": inspect_compilation(baseline["run"], gather_jits, dump_dir),
+            }
+        )
+    for group in args.group_beams:
+        for tile in args.tile:
+            run, _ = shared_runner(args, case, shared_fwd, group, tile)
+            compiled.append(
+                {
+                    "method": "C_shared_scan",
+                    "group_beams": group,
+                    "tile": tile,
+                    "kernels": inspect_compilation(
+                        run, (beam_decode_attention._beam_decode_attention,), dump_dir
+                    ),
+                }
+            )
+    result["compiled_kernels"] = compiled
+    result["compiler_note"] = (
+        "PTX counts are static instructions, not executed counts; "
+        "inspect SASS to confirm lowering; missing disassembly is reported explicitly"
+    )
+    result["padded_geometry"] = [
+        padded_geometry(args, snapshot, group, tile)
+        for snapshot in case["dense"]["snapshots"]
+        for group in args.group_beams
+        for tile in args.tile
+    ]
     if args.mode == "gpu-check":
         return result
     scrub = (
@@ -898,35 +1239,53 @@ def run_gpu(args):
         )
     )
     timings = []
-    for name, baseline in baselines.items():
-        for scope in ("run", "metadata", "total"):
-            timings.append(
-                {
-                    "method": name,
-                    "scope": scope,
-                    **measure_cuda(
-                        torch, baseline[scope], args.warmup, args.repeats, scrub
-                    ),
-                }
+    executions = ("eager", "graph") if args.execution == "both" else (args.execution,)
+    workloads = []
+    for baseline in baselines.values():
+        for scope in args.scopes:
+            workloads.append(
+                (
+                    {
+                        "method": baseline["method"],
+                        "splits": baseline["splits"],
+                        "scope": scope,
+                    },
+                    baseline[scope],
+                )
             )
     for group in args.group_beams:
         for tile in args.tile:
             run, total = shared_runner(args, case, shared_fwd, group, tile)
-            for scope, call in (
-                ("run", run),
-                ("metadata", lambda: rebuild_mask(case)),
-                ("total", total),
-            ):
-                timings.append(
-                    {
-                        "method": "C_shared_scan",
-                        "group_beams": group,
-                        "tile": tile,
-                        "scope": scope,
-                        **measure_cuda(torch, call, args.warmup, args.repeats, scrub),
-                    }
+            calls = {"run": run, "metadata": lambda: rebuild_mask(case), "total": total}
+            for scope in args.scopes:
+                workloads.append(
+                    (
+                        {
+                            "method": "C_shared_scan",
+                            "group_beams": group,
+                            "tile": tile,
+                            "scope": scope,
+                        },
+                        calls[scope],
+                    )
                 )
+    random.Random(args.seed).shuffle(workloads)
+    for fields, call in workloads:
+        for execution in executions:
+            label = "/".join(f"{key}={value}" for key, value in fields.items())
+            with torch.cuda.nvtx.range(f"beam_kv/{execution}/{label}"):
+                measurement = measure_cuda(
+                    torch,
+                    call,
+                    args.warmup,
+                    args.repeats,
+                    scrub,
+                    execution=execution,
+                    graph_batch=args.graph_batch,
+                )
+            timings.append({**fields, **measurement})
     result["timings"] = timings
+    result["comparisons"] = summarize_timings(timings)
     result["analytical_scan_geometry"] = [
         traffic_model(snapshot, group, tile, args.head_dim)
         for snapshot in case["dense"]["snapshots"]
@@ -937,6 +1296,193 @@ def run_gpu(args):
         "not collected; use Nsight Compute for sectors, L2/DRAM traffic, and occupancy"
     )
     return result
+
+
+def matrix_cases(preset):
+    cases = [
+        (
+            "check_mha_tails",
+            "gpu-check",
+            {"beams": 9, "steps": 17, "scan_spacing": 2, "check_graph": True},
+        ),
+        (
+            "check_gqa_tails",
+            "gpu-check",
+            {
+                "beams": 9,
+                "steps": 17,
+                "kv_heads": 2,
+                "scan_spacing": 2,
+                "check_graph": True,
+            },
+        ),
+        ("check_empty", "gpu-check", {"beams": 1, "steps": 0, "check_graph": True}),
+        (
+            "timing_control",
+            "benchmark",
+            {"beams": 8, "steps": 128, "execution": "both"},
+        ),
+        ("tile128_diagnostic", "gpu-check", {"beams": 8, "steps": 128, "tile": [128]}),
+    ]
+    for pattern in ("shared", "independent", "random"):
+        cases.append(
+            (
+                f"k32_{pattern}",
+                "benchmark",
+                {"beams": 32, "steps": 128, "pattern": pattern},
+            )
+        )
+    cases.extend(
+        [
+            ("k128_shared", "benchmark", {"beams": 128, "steps": 128}),
+            (
+                "requests8_shared",
+                "benchmark",
+                {"beams": 32, "steps": 128, "requests": 8},
+            ),
+            ("gqa_shared", "benchmark", {"beams": 32, "steps": 128, "kv_heads": 2}),
+            (
+                "scrub_shared",
+                "benchmark",
+                {"beams": 32, "steps": 128, "cache_mode": "scrub"},
+            ),
+        ]
+    )
+    if preset == "full":
+        cases.extend(
+            [
+                (
+                    "k8_independent",
+                    "benchmark",
+                    {"beams": 8, "steps": 128, "pattern": "independent"},
+                ),
+                (
+                    "k128_independent",
+                    "benchmark",
+                    {"beams": 128, "steps": 128, "pattern": "independent"},
+                ),
+                (
+                    "k128_random",
+                    "benchmark",
+                    {"beams": 128, "steps": 128, "pattern": "random"},
+                ),
+                (
+                    "requests8_independent",
+                    "benchmark",
+                    {
+                        "beams": 32,
+                        "steps": 128,
+                        "requests": 8,
+                        "pattern": "independent",
+                    },
+                ),
+                (
+                    "requests8_gqa",
+                    "benchmark",
+                    {"beams": 32, "steps": 128, "requests": 8, "kv_heads": 2},
+                ),
+                (
+                    "scrub_independent",
+                    "benchmark",
+                    {
+                        "beams": 32,
+                        "steps": 128,
+                        "cache_mode": "scrub",
+                        "pattern": "independent",
+                    },
+                ),
+                (
+                    "gqa_random",
+                    "benchmark",
+                    {"beams": 32, "steps": 128, "kv_heads": 2, "pattern": "random"},
+                ),
+                (
+                    "short_decode",
+                    "benchmark",
+                    {"beams": 32, "steps": 16, "head_dim": 64},
+                ),
+                ("long_decode", "benchmark", {"beams": 32, "steps": 1024}),
+                ("holes", "benchmark", {"beams": 32, "steps": 128, "scan_spacing": 4}),
+                (
+                    "append_only",
+                    "benchmark",
+                    {"beams": 32, "steps": 128, "allocator": "append"},
+                ),
+            ]
+        )
+    return cases
+
+
+def matrix_commands(args):
+    cases = matrix_cases(args.preset)
+    if args.case:
+        unknown = set(args.case) - {name for name, _, _ in cases}
+        if unknown:
+            raise ValueError(f"unknown matrix cases: {sorted(unknown)}")
+        cases = [case for case in cases if case[0] in args.case]
+    root = Path(args.output_dir)
+    commands = []
+    for name, mode, overrides in cases:
+        parameters = {
+            "dtype": "float16",
+            "group_beams": [4, 8, 16],
+            "tile": [32, 64],
+            "splits": [1, 2, 4],
+            "execution": "graph",
+            "graph_batch": args.graph_batch,
+            "repeats": args.repeats,
+            "warmup": args.warmup,
+            "output": str(root / f"{name}.json"),
+            "dump_dir": str(root / "kernels" / name),
+            **overrides,
+        }
+        command = [sys.executable, "-B", str(Path(__file__).resolve()), mode]
+        for key, value in parameters.items():
+            flag = "--" + key.replace("_", "-")
+            if isinstance(value, bool):
+                if value:
+                    command.append(flag)
+            else:
+                command.append(flag)
+                command.extend(
+                    str(v) for v in (value if isinstance(value, list) else [value])
+                )
+        commands.append(
+            {"name": name, "command": command, "output": parameters["output"]}
+        )
+    return commands
+
+
+def run_matrix(args):
+    if min(args.graph_batch, args.repeats, args.warmup) < 1:
+        raise ValueError("graph_batch, repeats, and warmup must be positive")
+    commands = matrix_commands(args)
+    if args.dry_run:
+        return {"kind": "matrix_dry_run", "cases": commands}
+    root = Path(args.output_dir)
+    if root.exists():
+        raise ValueError(
+            "matrix output directory already exists; select a fresh directory"
+        )
+    root.mkdir(parents=True)
+    manifest = {"kind": "matrix_run", "complete": False, "cases": []}
+    for index, item in enumerate(commands):
+        print(
+            f"[{index + 1}/{len(commands)}] {item['name']}", file=sys.stderr, flush=True
+        )
+        log = root / f"{item['name']}.log"
+        with log.open("w") as stream:
+            process = subprocess.run(
+                item["command"], stdout=stream, stderr=subprocess.STDOUT
+            )
+        record = {**item, "returncode": process.returncode, "log": str(log)}
+        manifest["cases"].append(record)
+        (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        if process.returncode:
+            raise RuntimeError(f"matrix stopped at {item['name']}; inspect {log}")
+    manifest["complete"] = True
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest
 
 
 def add_gpu_arguments(parser):
@@ -965,7 +1511,29 @@ def add_gpu_arguments(parser):
         help="additional spacing for baseline A",
     )
     parser.add_argument(
-        "--splits", type=int, default=4, help="existing decode kernel's KV split count"
+        "--splits",
+        type=int,
+        nargs="+",
+        default=[1, 2, 4],
+        help="existing decode kernel KV split counts to compare",
+    )
+    parser.add_argument(
+        "--execution", choices=("eager", "graph", "both"), default="both"
+    )
+    parser.add_argument(
+        "--graph-batch", type=int, default=64, help="calls per warm graph replay sample"
+    )
+    parser.add_argument(
+        "--scopes",
+        nargs="+",
+        choices=("run", "metadata", "total"),
+        default=["run", "metadata", "total"],
+    )
+    parser.add_argument(
+        "--dump-dir", help="export compiled PTX/TTGIR/cubin/SASS to this directory"
+    )
+    parser.add_argument(
+        "--output", help="write JSON to a new file; refuse to overwrite"
     )
     parser.add_argument("--cache-mode", choices=("warm", "scrub"), default="warm")
     parser.add_argument("--eviction-mib", type=int, default=256)
@@ -1029,16 +1597,41 @@ def main(argv=None):
             "benchmark", help="compare existing gather and shared-tile CUDA kernels"
         )
     )
+    matrix = subparsers.add_parser(
+        "matrix", help="run a staged V100 matrix in isolated processes"
+    )
+    matrix.add_argument("--preset", choices=("quick", "full"), default="quick")
+    matrix.add_argument(
+        "--output-dir",
+        required=True,
+        help="fresh directory for JSON, logs, and assembly",
+    )
+    matrix.add_argument(
+        "--case", nargs="+", help="run only named cases from the preset"
+    )
+    matrix.add_argument(
+        "--dry-run", action="store_true", help="print commands without importing CUDA"
+    )
+    matrix.add_argument("--graph-batch", type=int, default=64)
+    matrix.add_argument("--warmup", type=int, default=10)
+    matrix.add_argument("--repeats", type=int, default=30)
     args = parser.parse_args(
         argv if argv is not None else sys.argv[1:] or ["self-test"]
     )
     if args.mode == "self-test":
-        suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestBeamKVCPU)
+        suite = unittest.TestSuite(
+            unittest.defaultTestLoader.loadTestsFromTestCase(test_case)
+            for test_case in (TestBeamKVCPU, TestBenchmarkHarness)
+        )
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         return 0 if result.wasSuccessful() else 1
     try:
         if args.mode in ("gpu-check", "benchmark"):
+            if args.output and Path(args.output).exists():
+                raise ValueError("output file already exists; select a new path")
             result = run_gpu(args)
+        elif args.mode == "matrix":
+            result = run_matrix(args)
         else:
             snapshot = snapshot_from_args(args)
             result = traffic_model(
@@ -1049,8 +1642,15 @@ def main(argv=None):
             result["final_state"] = snapshot.trace[-1] if snapshot.trace else None
             if args.history:
                 result["history"] = snapshot.trace
-        print(json.dumps(result, indent=2, allow_nan=False))
-    except (ValueError, RuntimeError) as error:
+        output = json.dumps(result, indent=2, allow_nan=False)
+        if args.mode in ("gpu-check", "benchmark") and args.output:
+            target = Path(args.output)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("x") as stream:
+                stream.write(output + "\n")
+        else:
+            print(output)
+    except (ValueError, RuntimeError, OSError) as error:
         parser.error(str(error))
     return 0
 
