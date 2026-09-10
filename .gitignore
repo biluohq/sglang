@@ -281,5 +281,8 @@ artifacts/
 .claude/scheduled_tasks.lock
 .humanize/
 
+# Local benchmark virtual environments
+.venv-beam-kv/
+
 # Internal, non-published docs
 internal-docs/
