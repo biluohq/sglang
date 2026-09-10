@@ -767,23 +767,43 @@ def measure_cuda(torch, call, warmup, repeats, scrub):
     for _ in range(warmup):
         call()
     torch.cuda.synchronize()
-    events = [
-        (
-            torch.cuda.Event(enable_timing=True, external=True),
-            torch.cuda.Event(enable_timing=True, external=True),
-        )
-        for _ in range(repeats)
-    ]
-    graph = torch.cuda.CUDAGraph()
-    # Event nodes keep Python submission gaps outside the measured intervals.
-    with torch.cuda.graph(graph):
+    try:
+        probe = torch.cuda.Event(enable_timing=True, external=True)
+    except TypeError:
+        probe = None
+
+    if probe is None:
+        events = [
+            (
+                torch.cuda.Event(enable_timing=True),
+                torch.cuda.Event(enable_timing=True),
+            )
+            for _ in range(repeats)
+        ]
         for start, end in events:
             if scrub is not None:
                 scrub.add_(1)
             start.record()
             call()
             end.record()
-    graph.replay()
+    else:
+        events = [
+            (
+                torch.cuda.Event(enable_timing=True, external=True),
+                torch.cuda.Event(enable_timing=True, external=True),
+            )
+            for _ in range(repeats)
+        ]
+        graph = torch.cuda.CUDAGraph()
+        # Event nodes keep Python submission gaps outside the measured intervals.
+        with torch.cuda.graph(graph):
+            for start, end in events:
+                if scrub is not None:
+                    scrub.add_(1)
+                start.record()
+                call()
+                end.record()
+        graph.replay()
     torch.cuda.synchronize()
     samples = sorted(start.elapsed_time(end) * 1000.0 for start, end in events)
     return {
@@ -827,8 +847,8 @@ def run_gpu(args):
             "no runtime compaction or VMM is measured"
         ),
         "timing_note": (
-            "CUDA Graph replay with external event nodes; "
-            "excludes Python submission and scrub intervals"
+            "CUDA Graph replay with external event nodes when supported; "
+            "otherwise batched CUDA event timing; excludes scrub intervals"
         ),
         "scan_note": (
             "KV loads skip globally invalid slots; "
