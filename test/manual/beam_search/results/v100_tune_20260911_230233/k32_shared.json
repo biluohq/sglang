@@ -1,0 +1,3164 @@
+{
+  "kind": "measured_cuda",
+  "torch": "2.7.1",
+  "triton": "3.4.0",
+  "gpu": "Tesla V100-SXM2-32GB",
+  "environment": {
+    "python": "3.11.2",
+    "platform": "Linux-5.4.143.bsk.7-amd64-x86_64-with-glibc2.36",
+    "torch_cuda": "12.6",
+    "compute_capability": [
+      7,
+      0
+    ],
+    "multiprocessor_count": 80,
+    "total_memory_bytes": 34079899648,
+    "driver_query": "Tesla V100-SXM2-32GB, 535.161.08"
+  },
+  "parameters": {
+    "mode": "benchmark",
+    "beams": 32,
+    "steps": 128,
+    "pattern": "shared",
+    "allocator": "reuse",
+    "concentration": 0.8,
+    "seed": 42,
+    "initial_capacity": null,
+    "requests": 1,
+    "q_heads": 8,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "dtype": "float16",
+    "group_beams": [
+      4,
+      16
+    ],
+    "tile": [
+      16,
+      32
+    ],
+    "compute": [
+      "dot",
+      "simt"
+    ],
+    "query_tile": null,
+    "shared_splits": [
+      1,
+      2,
+      4
+    ],
+    "standalone": true,
+    "scan_spacing": 1,
+    "scatter_factor": 8,
+    "splits": [
+      1,
+      2,
+      4
+    ],
+    "execution": "graph",
+    "graph_batch": 64,
+    "scopes": [
+      "run",
+      "metadata",
+      "total"
+    ],
+    "dump_dir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared",
+    "output": "test/manual/beam_search/results/v100_tune_20260911_230233/k32_shared.json",
+    "cache_mode": "warm",
+    "eviction_mib": 256,
+    "warmup": 10,
+    "repeats": 30,
+    "check_graph": false
+  },
+  "correctness": {
+    "output_atol": 0.002,
+    "output_rtol": 0.002,
+    "errors": [
+      {
+        "method": "A_scattered_gather_split1",
+        "max_abs_error": 0.0009329183494833915
+      },
+      {
+        "method": "A_scattered_gather_split2",
+        "max_abs_error": 0.0009329183494833915
+      },
+      {
+        "method": "A_scattered_gather_split4",
+        "max_abs_error": 0.0009329183494833915
+      },
+      {
+        "method": "B_pool_gather_split1",
+        "max_abs_error": 0.0009329183494833915
+      },
+      {
+        "method": "B_pool_gather_split2",
+        "max_abs_error": 0.0009329183494833915
+      },
+      {
+        "method": "B_pool_gather_split4",
+        "max_abs_error": 0.0009329183494833915
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 4,
+        "query_tile": 16,
+        "query_rows": 4,
+        "tile": 16,
+        "shared_splits": 1,
+        "max_abs_error": 0.0002545304493261069
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 4,
+        "query_tile": 16,
+        "query_rows": 4,
+        "tile": 16,
+        "shared_splits": 2,
+        "max_abs_error": 0.0002714678530892911
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 4,
+        "query_tile": 16,
+        "query_rows": 4,
+        "tile": 16,
+        "shared_splits": 4,
+        "max_abs_error": 0.0002714678530892911
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 4,
+        "query_tile": 16,
+        "query_rows": 4,
+        "tile": 32,
+        "shared_splits": 1,
+        "max_abs_error": 0.0002714678530892911
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 4,
+        "query_tile": 16,
+        "query_rows": 4,
+        "tile": 32,
+        "shared_splits": 2,
+        "max_abs_error": 0.00027919519607755294
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 4,
+        "query_tile": 16,
+        "query_rows": 4,
+        "tile": 32,
+        "shared_splits": 4,
+        "max_abs_error": 0.0002714678530892911
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 16,
+        "query_tile": 16,
+        "query_rows": 16,
+        "tile": 16,
+        "shared_splits": 1,
+        "max_abs_error": 0.0002545304493261069
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 16,
+        "query_tile": 16,
+        "query_rows": 16,
+        "tile": 16,
+        "shared_splits": 2,
+        "max_abs_error": 0.0002714678530892911
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 16,
+        "query_tile": 16,
+        "query_rows": 16,
+        "tile": 16,
+        "shared_splits": 4,
+        "max_abs_error": 0.0002714678530892911
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 16,
+        "query_tile": 16,
+        "query_rows": 16,
+        "tile": 32,
+        "shared_splits": 1,
+        "max_abs_error": 0.0002714678530892911
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 16,
+        "query_tile": 16,
+        "query_rows": 16,
+        "tile": 32,
+        "shared_splits": 2,
+        "max_abs_error": 0.00027919519607755294
+      },
+      {
+        "method": "shared",
+        "compute": "dot",
+        "group_beams": 16,
+        "query_tile": 16,
+        "query_rows": 16,
+        "tile": 32,
+        "shared_splits": 4,
+        "max_abs_error": 0.0002714678530892911
+      },
+      {
+        "method": "shared",
+        "compute": "simt",
+        "group_beams": 4,
+        "query_tile": 4,
+        "query_rows": 4,
+        "tile": 16,
+        "shared_splits": 1,
+        "max_abs_error": 0.00024299721926834827
+      },
+      {
+        "method": "shared",
+        "compute": "simt",
+        "group_beams": 4,
+        "query_tile": 4,
+        "query_rows": 4,
+        "tile": 16,
+        "shared_splits": 2,
+        "max_abs_error": 0.00024299721926834827
+      },
+      {
+        "method": "shared",
+        "compute": "simt",
+        "group_beams": 4,
+        "query_tile": 4,
+        "query_rows": 4,
+        "tile": 16,
+        "shared_splits": 4,
+        "max_abs_error": 0.00024299721926834827
+      },
+      {
+        "method": "shared",
+        "compute": "simt",
+        "group_beams": 4,
+        "query_tile": 4,
+        "query_rows": 4,
+        "tile": 32,
+        "shared_splits": 1,
+        "max_abs_error": 0.00024299721926834827
+      },
+      {
+        "method": "shared",
+        "compute": "simt",
+        "group_beams": 4,
+        "query_tile": 4,
+        "query_rows": 4,
+        "tile": 32,
+        "shared_splits": 2,
+        "max_abs_error": 0.00024299721926834827
+      },
+      {
+        "method": "shared",
+        "compute": "simt",
+        "group_beams": 4,
+        "query_tile": 4,
+        "query_rows": 4,
+        "tile": 32,
+        "shared_splits": 4,
+        "max_abs_error": 0.00024299721926834827
+      }
+    ],
+    "graph_checked": false,
+    "graph_configurations_checked": 0
+  },
+  "source_allocator_state": [
+    {
+      "step": 128,
+      "live_nodes": 159,
+      "held_nodes": 159,
+      "scan_slots": 159,
+      "capacity": 256,
+      "generated_nodes": 4096,
+      "freed_nodes": 3937,
+      "reused_slots": 3937,
+      "expansions": 3
+    }
+  ],
+  "layout_note": "offline slot permutation preserves holes; no runtime compaction or VMM is measured",
+  "timing_note": "explicit eager and graph results using ordinary CUDA events; warm graphs amortize one replay submission over graph_batch calls; scrub graphs contain one call and retain replay submission overhead",
+  "scan_note": "KV loads skip globally invalid slots; dense tile compute and mask loads still span S",
+  "scope": "prebuilt parent paths; excludes selection, model forward, VMM, and initial data placement",
+  "metadata_scope": "gather copies path indices; shared zeroes/scatters the ancestry mask",
+  "buffer_bytes": {
+    "dense_kv": 651264,
+    "scattered_kv": 5181440,
+    "shared_visibility": 5088,
+    "shared_valid_slots": 159,
+    "shared_output_and_lse": 66560,
+    "shared_workspace_by_split": {
+      "2": 264192,
+      "4": 528384
+    },
+    "gather_workspace_by_variant": {
+      "A_scattered_gather_split1": 132096,
+      "A_scattered_gather_split2": 264192,
+      "A_scattered_gather_split4": 528384,
+      "B_pool_gather_split1": 132096,
+      "B_pool_gather_split2": 264192,
+      "B_pool_gather_split4": 528384
+    },
+    "gather_metadata_by_variant": {
+      "A_scattered_gather_split1": 33028,
+      "A_scattered_gather_split2": 33028,
+      "A_scattered_gather_split4": 33028,
+      "B_pool_gather_split1": 33028,
+      "B_pool_gather_split2": 33028,
+      "B_pool_gather_split4": 33028
+    }
+  },
+  "compiled_kernels": [
+    {
+      "method": "A_scattered_gather",
+      "splits": 1,
+      "kernels": [
+        {
+          "name": "_fwd_kernel_stage1",
+          "hash": "501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a",
+          "grid": [
+            32,
+            8,
+            1
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 94,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 133,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.sass"
+          }
+        },
+        {
+          "name": "_fwd_kernel_stage2",
+          "hash": "1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 15,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 0,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 2,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 2,
+      "kernels": [
+        {
+          "name": "_fwd_kernel_stage1",
+          "hash": "501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a",
+          "grid": [
+            32,
+            8,
+            2
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 94,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 133,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.sass"
+          }
+        },
+        {
+          "name": "_fwd_kernel_stage2",
+          "hash": "447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 21,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 0,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 4,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 4,
+      "kernels": [
+        {
+          "name": "_fwd_kernel_stage1",
+          "hash": "501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a",
+          "grid": [
+            32,
+            8,
+            4
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 94,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 133,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.sass"
+          }
+        },
+        {
+          "name": "_fwd_kernel_stage2",
+          "hash": "4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 24,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 0,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 8,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 1,
+      "kernels": [
+        {
+          "name": "_fwd_kernel_stage1",
+          "hash": "501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a",
+          "grid": [
+            32,
+            8,
+            1
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 94,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 133,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.sass"
+          }
+        },
+        {
+          "name": "_fwd_kernel_stage2",
+          "hash": "1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 15,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 0,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 2,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-1b40f3b8f5ad049cd9d3f85f008a1f9dbe9a55b5baca726ecd60187fc7cfb8e1.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 2,
+      "kernels": [
+        {
+          "name": "_fwd_kernel_stage1",
+          "hash": "501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a",
+          "grid": [
+            32,
+            8,
+            2
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 94,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 133,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.sass"
+          }
+        },
+        {
+          "name": "_fwd_kernel_stage2",
+          "hash": "447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 21,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 0,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 4,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-447be3225601a75e2a9ee8e5194ce5a154e798324fc74bad504b7c840f58bac4.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 4,
+      "kernels": [
+        {
+          "name": "_fwd_kernel_stage1",
+          "hash": "501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a",
+          "grid": [
+            32,
+            8,
+            4
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 94,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 133,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage1-501893273cfc2e6c6fadaf0229fb0ed0324e8cb48c98d23a599973c6c7c7af9a.sass"
+          }
+        },
+        {
+          "name": "_fwd_kernel_stage2",
+          "hash": "4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 24,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 0,
+          "num_warps": 4,
+          "num_stages": 2,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 8,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_fwd_kernel_stage2-4ad2a4daca21d996d42aab27572dc6cf1b35f4f5ae2798e6e685a04d83fb65b8.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "5fd8d38c8a99f059f3452474d32ec35f2a98b5958be1afde6f6d47d8b9bf885e",
+          "grid": [
+            8,
+            8,
+            1
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 159,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 16384,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 410,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-5fd8d38c8a99f059f3452474d32ec35f2a98b5958be1afde6f6d47d8b9bf885e.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-5fd8d38c8a99f059f3452474d32ec35f2a98b5958be1afde6f6d47d8b9bf885e.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-5fd8d38c8a99f059f3452474d32ec35f2a98b5958be1afde6f6d47d8b9bf885e.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-5fd8d38c8a99f059f3452474d32ec35f2a98b5958be1afde6f6d47d8b9bf885e.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "fa7174a5d52d0fb5bab21a59e13be29403ac281b6b8e242bf493c0bdd4c8500c",
+          "grid": [
+            8,
+            8,
+            2
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 161,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 16384,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 410,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-fa7174a5d52d0fb5bab21a59e13be29403ac281b6b8e242bf493c0bdd4c8500c.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-fa7174a5d52d0fb5bab21a59e13be29403ac281b6b8e242bf493c0bdd4c8500c.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-fa7174a5d52d0fb5bab21a59e13be29403ac281b6b8e242bf493c0bdd4c8500c.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-fa7174a5d52d0fb5bab21a59e13be29403ac281b6b8e242bf493c0bdd4c8500c.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 22,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 1024,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "0c62e7dfdbdbef26a1d03bf0af7ea85fc0961927f75237b2345effeb99086272",
+          "grid": [
+            8,
+            8,
+            4
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 161,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 16384,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 410,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-0c62e7dfdbdbef26a1d03bf0af7ea85fc0961927f75237b2345effeb99086272.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-0c62e7dfdbdbef26a1d03bf0af7ea85fc0961927f75237b2345effeb99086272.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-0c62e7dfdbdbef26a1d03bf0af7ea85fc0961927f75237b2345effeb99086272.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-0c62e7dfdbdbef26a1d03bf0af7ea85fc0961927f75237b2345effeb99086272.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 26,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "a6d344fa336be23ec0887a65db4e0f9c43ffa02e4fbd0363955a14b36fb5dfbe",
+          "grid": [
+            8,
+            8,
+            1
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 242,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 24576,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 1050,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-a6d344fa336be23ec0887a65db4e0f9c43ffa02e4fbd0363955a14b36fb5dfbe.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-a6d344fa336be23ec0887a65db4e0f9c43ffa02e4fbd0363955a14b36fb5dfbe.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-a6d344fa336be23ec0887a65db4e0f9c43ffa02e4fbd0363955a14b36fb5dfbe.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-a6d344fa336be23ec0887a65db4e0f9c43ffa02e4fbd0363955a14b36fb5dfbe.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "9135be803b6b6cabcc70d4029b3a23d4fbb5a968ebca353dc85db07d48f67eb2",
+          "grid": [
+            8,
+            8,
+            2
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 242,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 24576,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 1050,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-9135be803b6b6cabcc70d4029b3a23d4fbb5a968ebca353dc85db07d48f67eb2.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-9135be803b6b6cabcc70d4029b3a23d4fbb5a968ebca353dc85db07d48f67eb2.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-9135be803b6b6cabcc70d4029b3a23d4fbb5a968ebca353dc85db07d48f67eb2.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-9135be803b6b6cabcc70d4029b3a23d4fbb5a968ebca353dc85db07d48f67eb2.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 22,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 1024,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "19641bfc92f32b69e1474fd322db2570331883d3fa106ff1624f88ea7d8a4cbe",
+          "grid": [
+            8,
+            8,
+            4
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 242,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 24576,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 1050,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-19641bfc92f32b69e1474fd322db2570331883d3fa106ff1624f88ea7d8a4cbe.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-19641bfc92f32b69e1474fd322db2570331883d3fa106ff1624f88ea7d8a4cbe.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-19641bfc92f32b69e1474fd322db2570331883d3fa106ff1624f88ea7d8a4cbe.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-19641bfc92f32b69e1474fd322db2570331883d3fa106ff1624f88ea7d8a4cbe.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 26,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 1,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "cefe4fabd8f4ec6af900647303a735834ee8cd6f252d8476bafae26d5c24ceda",
+          "grid": [
+            2,
+            8,
+            1
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 165,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 16384,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 538,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-cefe4fabd8f4ec6af900647303a735834ee8cd6f252d8476bafae26d5c24ceda.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-cefe4fabd8f4ec6af900647303a735834ee8cd6f252d8476bafae26d5c24ceda.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-cefe4fabd8f4ec6af900647303a735834ee8cd6f252d8476bafae26d5c24ceda.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-cefe4fabd8f4ec6af900647303a735834ee8cd6f252d8476bafae26d5c24ceda.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 2,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "b748276930fe9e73fb7836e71508e2f894fa5bd2ead6ffd483e8813377720781",
+          "grid": [
+            2,
+            8,
+            2
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 163,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 16384,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 538,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-b748276930fe9e73fb7836e71508e2f894fa5bd2ead6ffd483e8813377720781.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-b748276930fe9e73fb7836e71508e2f894fa5bd2ead6ffd483e8813377720781.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-b748276930fe9e73fb7836e71508e2f894fa5bd2ead6ffd483e8813377720781.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-b748276930fe9e73fb7836e71508e2f894fa5bd2ead6ffd483e8813377720781.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 22,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 1024,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 4,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "1879004da058ca2580085d133628e7571cf24ef8b9d4a9f9637ecd90db3418a6",
+          "grid": [
+            2,
+            8,
+            4
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 163,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 16384,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 538,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-1879004da058ca2580085d133628e7571cf24ef8b9d4a9f9637ecd90db3418a6.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-1879004da058ca2580085d133628e7571cf24ef8b9d4a9f9637ecd90db3418a6.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-1879004da058ca2580085d133628e7571cf24ef8b9d4a9f9637ecd90db3418a6.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-1879004da058ca2580085d133628e7571cf24ef8b9d4a9f9637ecd90db3418a6.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 26,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 1,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "0f3f152901db0c49a8bbbb04f5c498cfa67a7eb890b2c6060910e60ec9a06a5f",
+          "grid": [
+            2,
+            8,
+            1
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 251,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 24576,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 1050,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-0f3f152901db0c49a8bbbb04f5c498cfa67a7eb890b2c6060910e60ec9a06a5f.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-0f3f152901db0c49a8bbbb04f5c498cfa67a7eb890b2c6060910e60ec9a06a5f.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-0f3f152901db0c49a8bbbb04f5c498cfa67a7eb890b2c6060910e60ec9a06a5f.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-0f3f152901db0c49a8bbbb04f5c498cfa67a7eb890b2c6060910e60ec9a06a5f.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 2,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "dc10970bf44d22bf8d54a3677c4f0338c6437ecb4b06c2956d9caadac329a20a",
+          "grid": [
+            2,
+            8,
+            2
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 255,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 24576,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 1050,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-dc10970bf44d22bf8d54a3677c4f0338c6437ecb4b06c2956d9caadac329a20a.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-dc10970bf44d22bf8d54a3677c4f0338c6437ecb4b06c2956d9caadac329a20a.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-dc10970bf44d22bf8d54a3677c4f0338c6437ecb4b06c2956d9caadac329a20a.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-dc10970bf44d22bf8d54a3677c4f0338c6437ecb4b06c2956d9caadac329a20a.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 22,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 1024,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 4,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "6f6365e840ac936d985d169b134ea4a64e557a3cb99a943260c8f41afa11baaf",
+          "grid": [
+            2,
+            8,
+            4
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 255,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 24576,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 1050,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-6f6365e840ac936d985d169b134ea4a64e557a3cb99a943260c8f41afa11baaf.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-6f6365e840ac936d985d169b134ea4a64e557a3cb99a943260c8f41afa11baaf.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-6f6365e840ac936d985d169b134ea4a64e557a3cb99a943260c8f41afa11baaf.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-6f6365e840ac936d985d169b134ea4a64e557a3cb99a943260c8f41afa11baaf.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 26,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "d19b172ee4c4297902a292ea5e79b7768fc9fd50f233a1e404d0a5a37cc5f7b2",
+          "grid": [
+            8,
+            8,
+            1
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 234,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2304,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 141,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-d19b172ee4c4297902a292ea5e79b7768fc9fd50f233a1e404d0a5a37cc5f7b2.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-d19b172ee4c4297902a292ea5e79b7768fc9fd50f233a1e404d0a5a37cc5f7b2.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-d19b172ee4c4297902a292ea5e79b7768fc9fd50f233a1e404d0a5a37cc5f7b2.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-d19b172ee4c4297902a292ea5e79b7768fc9fd50f233a1e404d0a5a37cc5f7b2.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "eba36590601dc6739d61c79624847f72ec65f4c75a1e4e11d603e5cb5e483029",
+          "grid": [
+            8,
+            8,
+            2
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 234,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2304,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 141,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-eba36590601dc6739d61c79624847f72ec65f4c75a1e4e11d603e5cb5e483029.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-eba36590601dc6739d61c79624847f72ec65f4c75a1e4e11d603e5cb5e483029.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-eba36590601dc6739d61c79624847f72ec65f4c75a1e4e11d603e5cb5e483029.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-eba36590601dc6739d61c79624847f72ec65f4c75a1e4e11d603e5cb5e483029.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 22,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 1024,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "1dda1a367a149655233952e652ed279dccaec1ee579536739b758c60636a5411",
+          "grid": [
+            8,
+            8,
+            4
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 234,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2304,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 141,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-1dda1a367a149655233952e652ed279dccaec1ee579536739b758c60636a5411.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-1dda1a367a149655233952e652ed279dccaec1ee579536739b758c60636a5411.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-1dda1a367a149655233952e652ed279dccaec1ee579536739b758c60636a5411.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-1dda1a367a149655233952e652ed279dccaec1ee579536739b758c60636a5411.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 26,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "323c001af39187f38e1bbbcc4c788cdf21a0c2479cbb9903f25a9daf5b9e49f3",
+          "grid": [
+            8,
+            8,
+            1
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 254,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2304,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 269,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-323c001af39187f38e1bbbcc4c788cdf21a0c2479cbb9903f25a9daf5b9e49f3.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-323c001af39187f38e1bbbcc4c788cdf21a0c2479cbb9903f25a9daf5b9e49f3.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-323c001af39187f38e1bbbcc4c788cdf21a0c2479cbb9903f25a9daf5b9e49f3.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-323c001af39187f38e1bbbcc4c788cdf21a0c2479cbb9903f25a9daf5b9e49f3.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "367360afc4693acec83eaa7ea397ab33760ec6b032e10379ee870790a49cd630",
+          "grid": [
+            8,
+            8,
+            2
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 255,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2304,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 269,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-367360afc4693acec83eaa7ea397ab33760ec6b032e10379ee870790a49cd630.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-367360afc4693acec83eaa7ea397ab33760ec6b032e10379ee870790a49cd630.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-367360afc4693acec83eaa7ea397ab33760ec6b032e10379ee870790a49cd630.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-367360afc4693acec83eaa7ea397ab33760ec6b032e10379ee870790a49cd630.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 22,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 1024,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-53d30c9f8dd2d4709e076246b69ac0fc97d59305acd3c86c59aadc8789c8d8d0.sass"
+          }
+        }
+      ]
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "kernels": [
+        {
+          "name": "_beam_decode_attention",
+          "hash": "e05c2dd39239b7e5e3f81a59fe850828604cdb9d0deceb8ed51ccf4a601b6540",
+          "grid": [
+            8,
+            8,
+            4
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 255,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2304,
+          "num_warps": 4,
+          "num_stages": 1,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 269,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-e05c2dd39239b7e5e3f81a59fe850828604cdb9d0deceb8ed51ccf4a601b6540.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-e05c2dd39239b7e5e3f81a59fe850828604cdb9d0deceb8ed51ccf4a601b6540.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-e05c2dd39239b7e5e3f81a59fe850828604cdb9d0deceb8ed51ccf4a601b6540.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_beam_decode_attention-e05c2dd39239b7e5e3f81a59fe850828604cdb9d0deceb8ed51ccf4a601b6540.sass"
+          }
+        },
+        {
+          "name": "_merge_beam_splits",
+          "hash": "2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c",
+          "grid": [
+            32,
+            8
+          ],
+          "target": "GPUTarget(backend='cuda', arch=70, warp_size=32)",
+          "registers_per_thread": 26,
+          "spills_reported_by_triton": 0,
+          "shared_memory_bytes": 2048,
+          "num_warps": 4,
+          "num_stages": 3,
+          "ptx_mma_instruction_count": 0,
+          "ptx_fma_instruction_count": 12,
+          "files": {
+            "ptx": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ptx",
+            "ttgir": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.ttgir",
+            "cubin": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.cubin",
+            "sass": "test/manual/beam_search/results/v100_tune_20260911_230233/kernels/k32_shared/_merge_beam_splits-2d1b6d6edc29aeb7f27eb76272d931a774b754d13273624d5c882791faf7e80c.sass"
+          }
+        }
+      ]
+    }
+  ],
+  "compiler_note": "PTX counts are static instructions, not executed counts; inspect SASS to confirm lowering; missing disassembly is reported explicitly",
+  "padded_geometry": [
+    {
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "block_m": 16,
+      "blocks_per_request": 64,
+      "padded_slots": 160,
+      "padded_pair_ratio": 5.0
+    },
+    {
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "block_m": 16,
+      "blocks_per_request": 128,
+      "padded_slots": 160,
+      "padded_pair_ratio": 5.0
+    },
+    {
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "block_m": 16,
+      "blocks_per_request": 256,
+      "padded_slots": 160,
+      "padded_pair_ratio": 5.0
+    },
+    {
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "block_m": 16,
+      "blocks_per_request": 64,
+      "padded_slots": 160,
+      "padded_pair_ratio": 5.0
+    },
+    {
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "block_m": 16,
+      "blocks_per_request": 128,
+      "padded_slots": 160,
+      "padded_pair_ratio": 5.0
+    },
+    {
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "block_m": 16,
+      "blocks_per_request": 256,
+      "padded_slots": 160,
+      "padded_pair_ratio": 5.0
+    },
+    {
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 1,
+      "block_m": 16,
+      "blocks_per_request": 16,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 2,
+      "block_m": 16,
+      "blocks_per_request": 32,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 4,
+      "block_m": 16,
+      "blocks_per_request": 64,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 1,
+      "block_m": 16,
+      "blocks_per_request": 16,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 2,
+      "block_m": 16,
+      "blocks_per_request": 32,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 4,
+      "block_m": 16,
+      "blocks_per_request": 64,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "block_m": 4,
+      "blocks_per_request": 64,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "block_m": 4,
+      "blocks_per_request": 128,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "block_m": 4,
+      "blocks_per_request": 256,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "block_m": 4,
+      "blocks_per_request": 64,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "block_m": 4,
+      "blocks_per_request": 128,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    },
+    {
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "block_m": 4,
+      "blocks_per_request": 256,
+      "padded_slots": 160,
+      "padded_pair_ratio": 1.25
+    }
+  ],
+  "source_hashes": {
+    "shared": "7704536c078ec1232f9eb28368382bb65ba8873d01cd18e01ce708e2c6b33ce6",
+    "gather": "34ca0066e2716e1ffad048ec7cbb3a25af13eeb61e99034a663fed6277bf691a"
+  },
+  "loader": "CUDA-only source subset; disabled PDL blocks removed, numeric bodies unchanged",
+  "standalone_source": {
+    "loaded_gather_sha256": "d5bdbacead7c6738571f0489d3a48164e303499ed8589c7b964da99b1bc31e32",
+    "pruned_pdl_blocks": 2,
+    "use_pdl": false
+  },
+  "cache_note": "warm repeats",
+  "timings": [
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.127250242978334,
+      "p10_us": 8.111000061035156,
+      "p90_us": 8.134500123560429
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 44.08650100231171,
+      "p10_us": 44.07250136137009,
+      "p90_us": 44.10799965262413
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 43.285250663757324,
+      "p10_us": 42.81200096011162,
+      "p90_us": 43.414000421762466
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.134500123560429,
+      "p10_us": 8.126500062644482,
+      "p90_us": 8.144999854266644
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 4,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 1.1665000347420573,
+      "p10_us": 1.1584999738261104,
+      "p90_us": 1.181500032544136
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 52.41825059056282,
+      "p10_us": 52.39799991250038,
+      "p90_us": 52.45000123977661
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 4,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 27.69349981099367,
+      "p10_us": 27.657000347971916,
+      "p90_us": 27.715999633073807
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 36.6005003452301,
+      "p10_us": 36.56350076198578,
+      "p90_us": 36.624498665332794
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.13300022855401,
+      "p10_us": 8.11500009149313,
+      "p90_us": 8.157500065863132
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 2,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 1.169250055681914,
+      "p10_us": 1.1630000080913305,
+      "p90_us": 1.180000021122396
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 47.95750044286251,
+      "p10_us": 47.945499420166016,
+      "p90_us": 47.97599837183952
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 19.37749981880188,
+      "p10_us": 19.36350017786026,
+      "p90_us": 19.404999911785126
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.127250242978334,
+      "p10_us": 8.116000331938267,
+      "p90_us": 8.137499913573265
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 31.314998865127563,
+      "p10_us": 31.30349889397621,
+      "p90_us": 31.326498836278915
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 4,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 1.1752499849535525,
+      "p10_us": 1.1680000461637974,
+      "p90_us": 1.1845000553876162
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 52.12800018489361,
+      "p10_us": 52.087001502513885,
+      "p90_us": 52.1479994058609
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 54.13450114428997,
+      "p10_us": 54.11149933934212,
+      "p90_us": 54.167501628398895
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 105.58399930596352,
+      "p10_us": 105.55399954319,
+      "p90_us": 105.6085005402565
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 37.91099973022938,
+      "p10_us": 37.73749992251396,
+      "p90_us": 38.06300088763237
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 69.17599961161613,
+      "p10_us": 69.07050311565399,
+      "p90_us": 69.2870020866394
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 32.38474950194359,
+      "p10_us": 32.363999634981155,
+      "p90_us": 32.409001141786575
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.13025003299117,
+      "p10_us": 8.10999982059002,
+      "p90_us": 8.152499794960022
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 26.875250041484833,
+      "p10_us": 26.866499334573746,
+      "p90_us": 26.890499517321587
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 54.68424968421459,
+      "p10_us": 54.657500237226486,
+      "p90_us": 54.70399931073189
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 49.43475127220154,
+      "p10_us": 49.39449951052666,
+      "p90_us": 49.46549981832504
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.128000423312187,
+      "p10_us": 8.116500452160835,
+      "p90_us": 8.147500455379486
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.136000018566847,
+      "p10_us": 8.125499822199345,
+      "p90_us": 8.146500214934349
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 4,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 29.47874926030636,
+      "p10_us": 29.44450080394745,
+      "p90_us": 29.541999101638794
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.129499852657318,
+      "p10_us": 8.112000301480293,
+      "p90_us": 8.14799964427948
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.157750125974417,
+      "p10_us": 8.140499703586102,
+      "p90_us": 8.182000368833542
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 23.621249943971634,
+      "p10_us": 23.610999807715416,
+      "p90_us": 23.637499660253525
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.132749702781439,
+      "p10_us": 8.116000331938267,
+      "p90_us": 8.154500275850296
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 37.30574995279312,
+      "p10_us": 37.296999245882034,
+      "p90_us": 37.32449933886528
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 38.63075003027916,
+      "p10_us": 38.600001484155655,
+      "p90_us": 38.654498755931854
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 60.2477490901947,
+      "p10_us": 60.137998312711716,
+      "p90_us": 60.38999930024147
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 4,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 28.29475048929453,
+      "p10_us": 28.250500559806824,
+      "p90_us": 28.32449972629547
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.132999762892723,
+      "p10_us": 8.125499822199345,
+      "p90_us": 8.148499764502048
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 61.02749891579151,
+      "p10_us": 60.9935000538826,
+      "p90_us": 61.060499399900436
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 1,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 21.150249987840652,
+      "p10_us": 21.112000569701195,
+      "p90_us": 21.18849940598011
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 40.04475101828575,
+      "p10_us": 40.03100097179413,
+      "p90_us": 40.07149860262871
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 40.82924872636795,
+      "p10_us": 40.7944992184639,
+      "p90_us": 40.85249826312065
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 45.736249536275864,
+      "p10_us": 45.71849852800369,
+      "p90_us": 45.75350135564804
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 1,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 1.1744999792426825,
+      "p10_us": 1.1675000423565507,
+      "p90_us": 1.1795000173151493
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 1,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 21.16800006479025,
+      "p10_us": 21.130500361323357,
+      "p90_us": 21.215500310063362
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 28.933250345289707,
+      "p10_us": 28.77349965274334,
+      "p90_us": 29.145000502467155
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.142999839037657,
+      "p10_us": 8.127500303089619,
+      "p90_us": 8.19149985909462
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.134500123560429,
+      "p10_us": 8.119000121951103,
+      "p90_us": 8.150500245392323
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.135499898344278,
+      "p10_us": 8.121499791741371,
+      "p90_us": 8.151499554514885
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 47.29924909770489,
+      "p10_us": 47.244999557733536,
+      "p90_us": 47.33699932694435
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.135250303894281,
+      "p10_us": 8.115500211715698,
+      "p90_us": 8.15850030630827
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 28.071499429643154,
+      "p10_us": 28.05349975824356,
+      "p90_us": 28.08150090277195
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 2,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 35.50824895501137,
+      "p10_us": 35.48150137066841,
+      "p90_us": 35.53050011396408
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 46.29174992442131,
+      "p10_us": 46.28000035881996,
+      "p90_us": 46.31400108337402
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 2,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 20.884250290691853,
+      "p10_us": 20.84749937057495,
+      "p90_us": 20.913999527692795
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 25.189249776303768,
+      "p10_us": 25.172999128699303,
+      "p90_us": 25.222500786185265
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 4,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.12899973243475,
+      "p10_us": 8.11500009149313,
+      "p90_us": 8.14799964427948
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 16,
+      "query_tile": 16,
+      "query_rows": 16,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 56.30924925208092,
+      "p10_us": 56.28350004553795,
+      "p90_us": 56.343499571084976
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 52.08900012075901,
+      "p10_us": 52.019499242305756,
+      "p90_us": 52.17650160193443
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 34.096499904990196,
+      "p10_us": 34.04700011014938,
+      "p90_us": 34.14050117135048
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 45.78850045800209,
+      "p10_us": 45.76149955391884,
+      "p90_us": 45.821499079465866
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 2,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 22.77499996125698,
+      "p10_us": 22.7425005286932,
+      "p90_us": 22.80700020492077
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 1,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 1.1742499773390591,
+      "p10_us": 1.1650000233203173,
+      "p90_us": 1.1924999998882413
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 1,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 22.332250140607357,
+      "p10_us": 22.294500842690468,
+      "p90_us": 22.38049916923046
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "simt",
+      "group_beams": 4,
+      "query_tile": 4,
+      "query_rows": 4,
+      "tile": 16,
+      "shared_splits": 1,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 97.08325192332268,
+      "p10_us": 97.07500040531158,
+      "p90_us": 97.1049964427948
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 1,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 22.300499491393566,
+      "p10_us": 22.26799912750721,
+      "p90_us": 22.350000217556953
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 2,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 1.1717499583028257,
+      "p10_us": 1.165500027127564,
+      "p90_us": 1.1805000249296427
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 4,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 28.900000266730785,
+      "p10_us": 28.8270004093647,
+      "p90_us": 28.936000540852547
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 1,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.133499883115292,
+      "p10_us": 8.120999671518803,
+      "p90_us": 8.159000426530838
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 2,
+      "scope": "metadata",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 8.136249613016844,
+      "p10_us": 8.121499791741371,
+      "p90_us": 8.148499764502048
+    },
+    {
+      "method": "C_shared_scan",
+      "compute": "dot",
+      "group_beams": 4,
+      "query_tile": 16,
+      "query_rows": 4,
+      "tile": 32,
+      "shared_splits": 4,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 45.27824930846691,
+      "p10_us": 45.24800181388855,
+      "p90_us": 45.31800001859665
+    },
+    {
+      "method": "A_scattered_gather",
+      "splits": 2,
+      "scope": "run",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 21.593499928712845,
+      "p10_us": 21.56900055706501,
+      "p90_us": 21.618999540805817
+    },
+    {
+      "method": "B_pool_gather",
+      "splits": 2,
+      "scope": "total",
+      "execution": "graph",
+      "calls_per_sample": 64,
+      "sample_count": 30,
+      "sample_unit": "per_call_average_of_replay",
+      "host_submission": "one replay submission gap amortized over calls_per_sample",
+      "median_us": 22.04900048673153,
+      "p10_us": 22.020500153303146,
+      "p90_us": 22.069500759243965
+    }
+  ],
+  "comparisons": [
+    {
+      "execution": "graph",
+      "scope": "metadata",
+      "baseline": "A_scattered_gather",
+      "baseline_splits": 4,
+      "baseline_median_us": 1.1665000347420573,
+      "shared_group_beams": 16,
+      "shared_tile": 32,
+      "shared_config": {
+        "compute": "dot",
+        "query_tile": 16,
+        "query_rows": 16,
+        "shared_splits": 2
+      },
+      "shared_median_us": 8.127250242978334,
+      "observed_speedup": 0.14352948412654987
+    },
+    {
+      "execution": "graph",
+      "scope": "metadata",
+      "baseline": "B_pool_gather",
+      "baseline_splits": 2,
+      "baseline_median_us": 1.1717499583028257,
+      "shared_group_beams": 16,
+      "shared_tile": 32,
+      "shared_config": {
+        "compute": "dot",
+        "query_tile": 16,
+        "query_rows": 16,
+        "shared_splits": 2
+      },
+      "shared_median_us": 8.127250242978334,
+      "observed_speedup": 0.14417544966271678
+    },
+    {
+      "execution": "graph",
+      "scope": "run",
+      "baseline": "A_scattered_gather",
+      "baseline_splits": 1,
+      "baseline_median_us": 21.16800006479025,
+      "shared_group_beams": 16,
+      "shared_tile": 16,
+      "shared_config": {
+        "compute": "dot",
+        "query_tile": 16,
+        "query_rows": 16,
+        "shared_splits": 4
+      },
+      "shared_median_us": 19.37749981880188,
+      "observed_speedup": 1.0924009940772161
+    },
+    {
+      "execution": "graph",
+      "scope": "run",
+      "baseline": "B_pool_gather",
+      "baseline_splits": 2,
+      "baseline_median_us": 20.884250290691853,
+      "shared_group_beams": 16,
+      "shared_tile": 16,
+      "shared_config": {
+        "compute": "dot",
+        "query_tile": 16,
+        "query_rows": 16,
+        "shared_splits": 4
+      },
+      "shared_median_us": 19.37749981880188,
+      "observed_speedup": 1.077757733762329
+    },
+    {
+      "execution": "graph",
+      "scope": "total",
+      "baseline": "A_scattered_gather",
+      "baseline_splits": 1,
+      "baseline_median_us": 22.332250140607357,
+      "shared_group_beams": 16,
+      "shared_tile": 16,
+      "shared_config": {
+        "compute": "dot",
+        "query_tile": 16,
+        "query_rows": 16,
+        "shared_splits": 4
+      },
+      "shared_median_us": 28.071499429643154,
+      "observed_speedup": 0.7955488874607382
+    },
+    {
+      "execution": "graph",
+      "scope": "total",
+      "baseline": "B_pool_gather",
+      "baseline_splits": 2,
+      "baseline_median_us": 22.04900048673153,
+      "shared_group_beams": 16,
+      "shared_tile": 16,
+      "shared_config": {
+        "compute": "dot",
+        "query_tile": 16,
+        "query_rows": 16,
+        "shared_splits": 4
+      },
+      "shared_median_us": 28.071499429643154,
+      "observed_speedup": 0.7854585944720879
+    }
+  ],
+  "analytical_scan_geometry": [
+    {
+      "kind": "analytical_not_measured",
+      "scope": "one_layer_one_KV_head_no_GQA_head_repetition",
+      "beams": 32,
+      "steps": 128,
+      "group_beams": 4,
+      "tile_tokens": 16,
+      "live_nodes": 159,
+      "capacity": 159,
+      "scan_slots": 159,
+      "scan_tile_loads": 80,
+      "gather_tile_loads": 256,
+      "scan_kv_references": 1272,
+      "gather_kv_references": 4096,
+      "scan_bytes_no_cache": 651264,
+      "scan_bytes_slot_valid_mask_no_cache": 651264,
+      "gather_bytes_no_cache": 2097152,
+      "scan_32b_sectors_aligned": 20352,
+      "gather_32b_sectors_aligned": 65536,
+      "gather_bytes_cold_ideal_reuse": 81408,
+      "scan_logical_pairs": 5088,
+      "gather_logical_pairs": 4096,
+      "read_reduction_no_cache": 3.220125786163522,
+      "compute_amplification": 1.2421875,
+      "assumptions": "aligned vectors, full scan, no tile padding loads or metadata traffic; sectors are not DRAM commands"
+    },
+    {
+      "kind": "analytical_not_measured",
+      "scope": "one_layer_one_KV_head_no_GQA_head_repetition",
+      "beams": 32,
+      "steps": 128,
+      "group_beams": 4,
+      "tile_tokens": 32,
+      "live_nodes": 159,
+      "capacity": 159,
+      "scan_slots": 159,
+      "scan_tile_loads": 40,
+      "gather_tile_loads": 128,
+      "scan_kv_references": 1272,
+      "gather_kv_references": 4096,
+      "scan_bytes_no_cache": 651264,
+      "scan_bytes_slot_valid_mask_no_cache": 651264,
+      "gather_bytes_no_cache": 2097152,
+      "scan_32b_sectors_aligned": 20352,
+      "gather_32b_sectors_aligned": 65536,
+      "gather_bytes_cold_ideal_reuse": 81408,
+      "scan_logical_pairs": 5088,
+      "gather_logical_pairs": 4096,
+      "read_reduction_no_cache": 3.220125786163522,
+      "compute_amplification": 1.2421875,
+      "assumptions": "aligned vectors, full scan, no tile padding loads or metadata traffic; sectors are not DRAM commands"
+    },
+    {
+      "kind": "analytical_not_measured",
+      "scope": "one_layer_one_KV_head_no_GQA_head_repetition",
+      "beams": 32,
+      "steps": 128,
+      "group_beams": 16,
+      "tile_tokens": 16,
+      "live_nodes": 159,
+      "capacity": 159,
+      "scan_slots": 159,
+      "scan_tile_loads": 20,
+      "gather_tile_loads": 256,
+      "scan_kv_references": 318,
+      "gather_kv_references": 4096,
+      "scan_bytes_no_cache": 162816,
+      "scan_bytes_slot_valid_mask_no_cache": 162816,
+      "gather_bytes_no_cache": 2097152,
+      "scan_32b_sectors_aligned": 5088,
+      "gather_32b_sectors_aligned": 65536,
+      "gather_bytes_cold_ideal_reuse": 81408,
+      "scan_logical_pairs": 5088,
+      "gather_logical_pairs": 4096,
+      "read_reduction_no_cache": 12.880503144654089,
+      "compute_amplification": 1.2421875,
+      "assumptions": "aligned vectors, full scan, no tile padding loads or metadata traffic; sectors are not DRAM commands"
+    },
+    {
+      "kind": "analytical_not_measured",
+      "scope": "one_layer_one_KV_head_no_GQA_head_repetition",
+      "beams": 32,
+      "steps": 128,
+      "group_beams": 16,
+      "tile_tokens": 32,
+      "live_nodes": 159,
+      "capacity": 159,
+      "scan_slots": 159,
+      "scan_tile_loads": 10,
+      "gather_tile_loads": 128,
+      "scan_kv_references": 318,
+      "gather_kv_references": 4096,
+      "scan_bytes_no_cache": 162816,
+      "scan_bytes_slot_valid_mask_no_cache": 162816,
+      "gather_bytes_no_cache": 2097152,
+      "scan_32b_sectors_aligned": 5088,
+      "gather_32b_sectors_aligned": 65536,
+      "gather_bytes_cold_ideal_reuse": 81408,
+      "scan_logical_pairs": 5088,
+      "gather_logical_pairs": 4096,
+      "read_reduction_no_cache": 12.880503144654089,
+      "compute_amplification": 1.2421875,
+      "assumptions": "aligned vectors, full scan, no tile padding loads or metadata traffic; sectors are not DRAM commands"
+    }
+  ],
+  "analytical_geometry_note": "uncapped conceptual beam groups only; actual capped query/split geometry is in padded_geometry",
+  "hardware_counters": "not collected; use Nsight Compute for sectors, L2/DRAM traffic, and occupancy"
+}
