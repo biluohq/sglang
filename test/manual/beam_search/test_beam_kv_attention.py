@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import ast
+import hashlib
 import heapq
+import importlib.util
+import itertools
 import json
+import linecache
+import logging
 import math
 import platform
 import random
@@ -16,8 +22,8 @@ import unittest
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock
+from types import ModuleType, SimpleNamespace
+from unittest.mock import MagicMock, Mock, patch
 
 
 @dataclass
@@ -496,6 +502,10 @@ class TestBenchmarkHarness(unittest.TestCase):
                 "method": "C_shared_scan",
                 "group_beams": 8,
                 "tile": 64,
+                "compute": "dot",
+                "query_tile": 16,
+                "query_rows": 8,
+                "shared_splits": 1,
                 "median_us": 10,
                 "execution": "graph",
                 "scope": "total",
@@ -533,6 +543,7 @@ class TestBenchmarkHarness(unittest.TestCase):
     def test_matrix_is_staged_and_supports_selection(self):
         args = SimpleNamespace(
             preset="quick",
+            python=None,
             case=None,
             output_dir="/tmp/beam-matrix-test",
             graph_batch=32,
@@ -554,13 +565,393 @@ class TestBenchmarkHarness(unittest.TestCase):
     def test_padded_geometry_counts_real_blocks(self):
         args = SimpleNamespace(q_heads=8, kv_heads=8, beams=8, steps=128)
         snapshot = simulate_tree(8, 128)
-        geometry = padded_geometry(args, snapshot, 8, 64)
+        config = {
+            "group_beams": 8,
+            "tile": 64,
+            "query_rows": 8,
+            "compute": "dot",
+            "shared_splits": 4,
+        }
+        geometry = padded_geometry(args, snapshot, config)
         self.assertEqual(geometry["block_m"], 16)
-        self.assertEqual(geometry["blocks_per_request"], 8)
+        self.assertEqual(geometry["blocks_per_request"], 32)
         self.assertEqual(geometry["padded_pair_ratio"], 3.0)
 
+    def test_query_cap_deduplicates_large_beam_groups(self):
+        args = SimpleNamespace(
+            beams=32,
+            q_heads=8,
+            kv_heads=2,
+            query_tile=None,
+            group_beams=[4, 8, 16],
+            compute=["dot", "simt"],
+            tile=[16, 32],
+            shared_splits=[1, 2, 4],
+        )
+        configs = shared_configs(args)
+        self.assertEqual(len(configs), 12)
+        self.assertEqual(
+            {c["query_rows"] for c in configs if c["compute"] == "dot"}, {16}
+        )
+        self.assertEqual(
+            {c["query_rows"] for c in configs if c["compute"] == "simt"}, {4}
+        )
+        args.beams = 1
+        self.assertEqual({c["query_rows"] for c in shared_configs(args)}, {4})
+        args.query_tile = 16
+        with self.assertRaises(ValueError):
+            shared_configs(args)
 
-def load_cuda():
+    def test_split_partition_and_merge_match_full_attention(self):
+        snapshot = relayout(simulate_tree(3, 17), spacing=3, seed=8)
+        keys, values = cpu_kv(snapshot)
+        query = [0.2, -0.8, 0.5, 0.1]
+        for tile, splits, end in itertools.product(
+            (16, 32), (1, 2, 4, 8), (0, 1, 17, len(keys))
+        ):
+            split_size = math.ceil(math.ceil(end / tile) / splits) * tile
+            for path in snapshot.slot_paths():
+                retained = [slot for slot in path if slot < end]
+                result = ([0.0] * 4, -math.inf)
+                pieces = []
+                for split in range(splits):
+                    slots = [
+                        slot
+                        for slot in retained
+                        if split * split_size
+                        <= slot
+                        < min((split + 1) * split_size, end)
+                    ]
+                    pieces.extend(slots)
+                    result = merge_states(
+                        result, reference_attention(query, keys, values, slots)
+                    )
+                self.assertEqual(sorted(pieces), sorted(retained))
+                expected = reference_attention(query, keys, values, retained)
+                for actual, wanted in zip(result[0], expected[0]):
+                    self.assertAlmostEqual(actual, wanted, places=11)
+                if retained:
+                    self.assertAlmostEqual(result[1], expected[1], places=11)
+                else:
+                    self.assertEqual(result[1], -math.inf)
+
+    def test_source_subset_does_not_import_runtime_or_modify_function_bodies(self):
+        source = (
+            "import missing_runtime\nCONST = 7\ndef f(x: int):\n    return x + CONST\n"
+        )
+        with patch.object(Path, "read_text", return_value=source):
+            module = load_source_subset(
+                Path("numeric.py"), "beam_subset_test", ["f"], ["CONST"], {}
+            )
+        try:
+            self.assertEqual(module.f(3), 10)
+            self.assertIs(module.f.__annotations__["x"], int)
+            self.assertEqual(module.f.__code__.co_firstlineno, 3)
+            self.assertEqual(
+                module.source_sha256, hashlib.sha256(source.encode()).hexdigest()
+            )
+        finally:
+            sys.modules.pop("beam_subset_test", None)
+        with (
+            patch.object(Path, "read_text", return_value=source),
+            self.assertRaises(RuntimeError),
+        ):
+            load_source_subset(
+                Path("numeric.py"), "beam_missing_test", ["missing"], [], {}
+            )
+
+    def test_standalone_loader_launches_existing_cuda_baseline_without_runtime(self):
+        launches = []
+
+        class FakeJIT:
+            def __init__(self, function):
+                self.fn = function
+
+            def __getitem__(self, grid):
+                def launch(*args, **kwargs):
+                    launches.append((self.fn.__name__, grid, kwargs))
+
+                return launch
+
+        class TensorShape:
+            def __init__(self, shape, dtype="float16"):
+                self.shape = shape
+                self.ndim = len(shape)
+                self.dtype = dtype
+                self.device = "cuda:0"
+                self.is_cuda = True
+
+            def stride(self, axis):
+                return math.prod(self.shape[axis + 1 :])
+
+            def numel(self):
+                return math.prod(self.shape)
+
+            def is_contiguous(self):
+                return True
+
+        torch = ModuleType("torch")
+        torch.float16, torch.bfloat16 = "float16", "bfloat16"
+        torch.float32, torch.bool, torch.int32 = "float32", "bool", "int32"
+        torch.version = SimpleNamespace(hip=None)
+        triton = ModuleType("triton")
+        language = ModuleType("triton.language")
+        language.constexpr = int
+        triton.language = language
+        triton.jit = FakeJIT
+        triton.cdiv = lambda x, y: (x + y - 1) // y
+        triton.next_power_of_2 = lambda x: 1 << (x - 1).bit_length()
+        runtime_before = {name for name in sys.modules if name.startswith("sglang")}
+        isolated_names = (
+            "beam_experiment_shared",
+            "beam_experiment_gather",
+            "beam_experiment_score_mod",
+        )
+        with patch.dict(
+            sys.modules, {"torch": torch, "triton": triton, "triton.language": language}
+        ):
+            try:
+                shared, gather = load_standalone_kernels(torch, triton)
+                self.assertTrue(callable(shared.beam_decode_attention_fwd))
+                self.assertEqual(gather.pruned_pdl_blocks, 2)
+                self.assertNotEqual(gather.loaded_source_sha256, gather.source_sha256)
+                for name in ("_fwd_kernel_stage2", "_fwd_grouped_kernel_stage1"):
+                    loaded = "".join(
+                        linecache.getlines(
+                            getattr(gather, name).fn.__code__.co_filename
+                        )
+                    )
+                    self.assertNotIn("tl.extra.cuda.gdc_", loaded)
+                for kv_heads, expected_stage in (
+                    (8, "_fwd_kernel_stage1"),
+                    (2, "_fwd_grouped_kernel_stage1"),
+                ):
+                    launches.clear()
+                    q = TensorShape((9, 8, 128))
+                    kv = TensorShape((96, kv_heads, 128))
+                    partial = TensorShape((9, 8, 4, 128))
+                    lse = TensorShape((9, 8, 4))
+                    indptr = TensorShape((10,))
+                    gather.decode_attention_fwd(
+                        q,
+                        kv,
+                        kv,
+                        q,
+                        indptr,
+                        None,
+                        partial,
+                        lse,
+                        None,
+                        4,
+                        1 / math.sqrt(128),
+                        1.0,
+                        1.0,
+                        enable_lean=False,
+                    )
+                    self.assertEqual(
+                        [entry[0] for entry in launches],
+                        [expected_stage, "_fwd_kernel_stage2"],
+                    )
+                    self.assertEqual(launches[0][1][0], 9)
+                    self.assertEqual(launches[0][2]["PAGE_SIZE"], 1)
+                    self.assertFalse(launches[1][2]["USE_PDL"])
+                for compute, splits in itertools.product(("dot", "simt"), (1, 4)):
+                    launches.clear()
+                    q = TensorShape((18, 8, 128))
+                    kv = TensorShape((192, 2, 128))
+                    metadata = (
+                        TensorShape((18, 96), "bool"),
+                        TensorShape((2, 96), "bool"),
+                        TensorShape((18,), "bool"),
+                        TensorShape((2,), "int32"),
+                    )
+                    workspace = (
+                        TensorShape((splits, 18, 8, 128), "float32"),
+                        TensorShape((splits, 18, 8), "float32"),
+                    )
+                    shared.beam_decode_attention_fwd(
+                        q,
+                        kv,
+                        kv,
+                        *metadata,
+                        q,
+                        TensorShape((18, 8), "float32"),
+                        beams_per_request=9,
+                        group_beams=16,
+                        tile_tokens=16,
+                        query_tile=4,
+                        compute=compute,
+                        num_splits=splits,
+                        partial_out=workspace[0],
+                        partial_lse=workspace[1],
+                    )
+                    self.assertEqual(launches[0][1], (9, 2, 2 * splits))
+                    self.assertEqual(launches[0][2]["QUERY_ROWS"], 4)
+                    self.assertEqual(
+                        launches[0][2]["BLOCK_M"], 16 if compute == "dot" else 4
+                    )
+                    self.assertEqual(len(launches), 2 if splits > 1 else 1)
+                    if splits > 1:
+                        self.assertEqual(launches[1][0], "_merge_beam_splits")
+                        self.assertEqual(launches[1][1], (18, 8))
+                self.assertEqual(
+                    {name for name in sys.modules if name.startswith("sglang")},
+                    runtime_before,
+                )
+            finally:
+                for name in isolated_names:
+                    sys.modules.pop(name, None)
+
+    def test_query_tiles_cover_each_beam_head_once(self):
+        for beams, gqa, cap in itertools.product(
+            (1, 3, 9, 32), (1, 3, 4, 16), (1, 4, 16)
+        ):
+            query_rows = min(min(16, beams) * gqa, cap)
+            coordinates = []
+            for group in range(math.ceil(beams * gqa / query_rows)):
+                for row in range(query_rows):
+                    index = group * query_rows + row
+                    if index // gqa < beams:
+                        coordinates.append((index // gqa, index % gqa))
+            self.assertEqual(
+                coordinates, list(itertools.product(range(beams), range(gqa)))
+            )
+
+    def test_isolated_matrix_selects_existing_python(self):
+        args = SimpleNamespace(
+            preset="compiler",
+            python="/opt/venvs/triton31/bin/python",
+            case=None,
+            output_dir="/tmp/beam-compiler",
+            graph_batch=64,
+            repeats=10,
+            warmup=3,
+        )
+        for case in matrix_commands(args):
+            self.assertEqual(case["command"][0], args.python)
+            self.assertIn("--standalone", case["command"])
+            self.assertIn("--query-tile", case["command"])
+        self.assertEqual(len(matrix_cases("v100-tune")), 9)
+
+
+def load_source_subset(path, module_name, functions, constants, namespace):
+    source = path.read_text()
+    tree = ast.parse(source, filename=str(path))
+    selected, found = [], set()
+    requested = set(functions) | set(constants)
+    for node in tree.body:
+        name = node.name if isinstance(node, ast.FunctionDef) else None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            name = target.id if isinstance(target, ast.Name) else None
+        if name in requested:
+            selected.append(node)
+            found.add(name)
+    if found != requested:
+        raise RuntimeError(
+            f"standalone loader missing definitions: {requested - found}"
+        )
+    pdl_blocks = [
+        child
+        for node in selected
+        for child in ast.walk(node)
+        if isinstance(child, ast.If)
+        and isinstance(child.test, ast.Name)
+        and child.test.id == "USE_PDL"
+    ]
+    loaded_source = source
+    filename = str(path)
+    if pdl_blocks:
+        lines = source.splitlines(keepends=True)
+        for node in pdl_blocks:
+            if node.orelse:
+                raise RuntimeError(
+                    "standalone PDL pruning does not support an else branch"
+                )
+            lines[node.lineno - 1] = " " * node.col_offset + "pass\n"
+            for i in range(node.lineno, node.end_lineno):
+                lines[i] = "\n"
+        loaded_source = "".join(lines)
+        filename = f"{path}::<standalone-no-pdl>"
+        linecache.cache[filename] = (len(loaded_source), None, lines, filename)
+        reparsed = ast.parse(loaded_source, filename=filename)
+        starts = {node.lineno for node in selected}
+        selected = [node for node in reparsed.body if node.lineno in starts]
+    module = ModuleType(module_name)
+    module.__file__ = str(path)
+    module.__dict__.update(namespace)
+    sys.modules[module_name] = module
+    # Triton inspects cached source; it must match the disabled-PDL specialization.
+    exec(
+        compile(
+            ast.Module(body=selected, type_ignores=[]),
+            filename,
+            "exec",
+            dont_inherit=True,
+        ),
+        module.__dict__,
+    )
+    module.source_sha256 = hashlib.sha256(source.encode()).hexdigest()
+    module.loaded_source_sha256 = hashlib.sha256(loaded_source.encode()).hexdigest()
+    module.pruned_pdl_blocks = len(pdl_blocks)
+    return module
+
+
+def load_standalone_kernels(torch, triton):
+    from typing import Tuple
+
+    import triton.language as tl
+
+    root = Path(__file__).resolve().parents[3] / "python/sglang/kernels/ops/attention"
+    shared_name = "beam_experiment_shared"
+    spec = importlib.util.spec_from_file_location(
+        shared_name, root / "beam_decode_attention.py"
+    )
+    shared = importlib.util.module_from_spec(spec)
+    sys.modules[shared_name] = shared
+    spec.loader.exec_module(shared)
+    auxiliary = load_source_subset(
+        root / "score_mod.py",
+        "beam_experiment_score_mod",
+        ["unpack_aux_tensors"],
+        [],
+        {},
+    )
+    gather = load_source_subset(
+        root / "decode_attention.py",
+        "beam_experiment_gather",
+        [
+            "tanh",
+            "_grouped_head_tiles",
+            "_extract_kv_strides",
+            "_mla_tuning_applies",
+            "_mla_launch_plan",
+            "_fwd_kernel_stage1",
+            "_fwd_grouped_kernel_stage1",
+            "_fwd_kernel_stage2",
+            "_decode_att_m_fwd",
+            "_decode_grouped_att_m_fwd",
+            "_decode_softmax_reducev_fwd",
+            "decode_attention_fwd_normal",
+            "decode_attention_fwd_grouped",
+            "decode_attention_fwd",
+        ],
+        ["_MIN_BLOCK_KV", "_GROUPED_BLOCK_H", "_MLA_BLOCK_N"],
+        {
+            "torch": torch,
+            "triton": triton,
+            "tl": tl,
+            "Tuple": Tuple,
+            "_is_hip": False,
+            "_is_gfx1250": False,
+            "logger": logging.getLogger("beam_experiment_gather"),
+            "unpack_aux_tensors": auxiliary.unpack_aux_tensors,
+        },
+    )
+    return shared, gather
+
+
+def load_cuda(standalone=False):
     try:
         import torch
         import triton
@@ -573,17 +964,19 @@ def load_cuda():
         raise RuntimeError(
             "GPU modes require an NVIDIA CUDA GPU; no GPU checks were run"
         )
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python"))
-    try:
-        from sglang.kernels.ops.attention.beam_decode_attention import (
-            beam_decode_attention_fwd,
-        )
-        from sglang.kernels.ops.attention.decode_attention import decode_attention_fwd
-    except ImportError as error:
-        raise RuntimeError(
-            "GPU modes require this checkout's SGLang runtime dependencies"
-        ) from error
-    return torch, triton, beam_decode_attention_fwd, decode_attention_fwd
+    if standalone:
+        shared, gather = load_standalone_kernels(torch, triton)
+    else:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python"))
+        try:
+            from sglang.kernels.ops.attention import beam_decode_attention as shared
+            from sglang.kernels.ops.attention import decode_attention as gather
+        except ImportError as error:
+            raise RuntimeError(
+                "runtime imports unavailable; use --standalone "
+                "for a torch/triton-only experiment"
+            ) from error
+    return torch, triton, shared, gather
 
 
 def prepare_gpu_case(args, torch):
@@ -694,8 +1087,38 @@ def rebuild_mask(case):
     visible.logical_and_(case["query_valid"][:, None])
 
 
-def shared_runner(args, case, shared_fwd, group, tile):
+def shared_configs(args):
+    configs = []
+    seen = set()
+    gqa = args.q_heads // args.kv_heads
+    for compute, group, tile, split in itertools.product(
+        args.compute, args.group_beams, args.tile, args.shared_splits
+    ):
+        cap = args.query_tile or (4 if compute == "simt" else 16)
+        if compute == "simt" and cap > 8:
+            raise ValueError("SIMT --query-tile must be at most 8")
+        query_rows = min(min(group, args.beams) * gqa, cap)
+        key = (compute, query_rows, tile, split)
+        if key in seen:
+            continue
+        seen.add(key)
+        configs.append(
+            {
+                "compute": compute,
+                "group_beams": group,
+                "query_tile": cap,
+                "query_rows": query_rows,
+                "tile": tile,
+                "shared_splits": split,
+            }
+        )
+    return configs
+
+
+def shared_runner(args, case, shared_fwd, config):
     dense = case["dense"]
+    split = config["shared_splits"]
+    partial_out, partial_lse = case["shared_workspace"].get(split, (None, None))
 
     def run():
         shared_fwd(
@@ -709,8 +1132,13 @@ def shared_runner(args, case, shared_fwd, group, tile):
             case["out"],
             case["lse"],
             beams_per_request=args.beams,
-            group_beams=group,
-            tile_tokens=tile,
+            group_beams=config["group_beams"],
+            tile_tokens=config["tile"],
+            query_tile=config["query_tile"],
+            compute=config["compute"],
+            num_splits=split,
+            partial_out=partial_out,
+            partial_lse=partial_lse,
         )
 
     def total():
@@ -833,74 +1261,70 @@ def verify_gpu(args, case, torch, shared_fwd, baselines):
             atol=1e-10,
             rtol=1e-10,
         )
-    for group in args.group_beams:
-        for tile in args.tile:
-            run, _ = shared_runner(args, case, shared_fwd, group, tile)
-            run()
-            torch.testing.assert_close(
-                case["out"].double(), reference, atol=tolerance, rtol=tolerance
-            )
-            torch.testing.assert_close(
-                case["lse"].double(), reference_lse, atol=1e-4, rtol=1e-4
-            )
-            errors.append(
-                {
-                    "method": "shared",
-                    "group_beams": group,
-                    "tile": tile,
-                    "max_abs_error": (case["out"].double() - reference)
-                    .abs()
-                    .max()
-                    .item(),
-                }
-            )
-    run, _ = shared_runner(args, case, shared_fwd, args.group_beams[0], args.tile[0])
-    case["query_valid"][-1] = False
-    rebuild_mask(case)
-    run()
-    torch.testing.assert_close(
-        case["out"][-1], torch.zeros_like(case["out"][-1]), atol=0, rtol=0
-    )
-    assert torch.isneginf(case["lse"][-1]).all().item()
-    case["query_valid"].fill_(True)
-    rebuild_mask(case)
     saved_ends = case["dense"]["ends"].clone()
-    case["dense"]["ends"].zero_()
-    run()
-    torch.testing.assert_close(
-        case["out"], torch.zeros_like(case["out"]), atol=0, rtol=0
-    )
-    assert torch.isneginf(case["lse"]).all().item()
-    case["dense"]["ends"].copy_(saved_ends)
-    if args.check_graph:
-        stream = torch.cuda.Stream()
-        stream.wait_stream(torch.cuda.current_stream())
-        with torch.cuda.stream(stream):
-            run()
-        torch.cuda.current_stream().wait_stream(stream)
-        graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(graph, stream=stream):
-            run()
-        torch.cuda.current_stream().wait_stream(stream)
-        for end in (0, 1, None):
-            if end is None:
-                case["dense"]["ends"].copy_(saved_ends)
-            else:
-                case["dense"]["ends"].copy_(saved_ends.clamp(max=end))
-            graph.replay()
-            expected, expected_lse = torch_reference(args, case, torch)
-            torch.testing.assert_close(
-                case["out"].double(), expected, atol=tolerance, rtol=tolerance
-            )
-            torch.testing.assert_close(
-                case["lse"].double(), expected_lse, atol=1e-4, rtol=1e-4
-            )
+    configs = shared_configs(args)
+    for config in configs:
+        run, _ = shared_runner(args, case, shared_fwd, config)
+        run()
+        torch.testing.assert_close(
+            case["out"].double(), reference, atol=tolerance, rtol=tolerance
+        )
+        torch.testing.assert_close(
+            case["lse"].double(), reference_lse, atol=1e-4, rtol=1e-4
+        )
+        errors.append(
+            {
+                "method": "shared",
+                **config,
+                "max_abs_error": (case["out"].double() - reference).abs().max().item(),
+            }
+        )
+        case["query_valid"][-1] = False
+        rebuild_mask(case)
+        run()
+        torch.testing.assert_close(
+            case["out"][-1], torch.zeros_like(case["out"][-1]), atol=0, rtol=0
+        )
+        assert torch.isneginf(case["lse"][-1]).all().item()
+        case["query_valid"].fill_(True)
+        rebuild_mask(case)
+        case["dense"]["ends"].zero_()
+        run()
+        torch.testing.assert_close(
+            case["out"], torch.zeros_like(case["out"]), atol=0, rtol=0
+        )
+        assert torch.isneginf(case["lse"]).all().item()
+        case["dense"]["ends"].copy_(saved_ends)
+        if args.check_graph:
+            stream = torch.cuda.Stream()
+            stream.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(stream):
+                run()
+            torch.cuda.current_stream().wait_stream(stream)
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph, stream=stream):
+                run()
+            torch.cuda.current_stream().wait_stream(stream)
+            for end in (0, 1, config["tile"] - 1, config["tile"] + 1, None):
+                if end is None:
+                    case["dense"]["ends"].copy_(saved_ends)
+                else:
+                    case["dense"]["ends"].copy_(saved_ends.clamp(max=end))
+                graph.replay()
+                expected, expected_lse = torch_reference(args, case, torch)
+                torch.testing.assert_close(
+                    case["out"].double(), expected, atol=tolerance, rtol=tolerance
+                )
+                torch.testing.assert_close(
+                    case["lse"].double(), expected_lse, atol=1e-4, rtol=1e-4
+                )
     torch.cuda.synchronize()
     return {
         "output_atol": tolerance,
         "output_rtol": tolerance,
         "errors": errors,
         "graph_checked": args.check_graph,
+        "graph_configurations_checked": len(configs) if args.check_graph else 0,
     }
 
 
@@ -989,6 +1413,15 @@ def summarize_timings(timings):
                         "baseline_median_us": baseline["median_us"],
                         "shared_group_beams": best["group_beams"],
                         "shared_tile": best["tile"],
+                        "shared_config": {
+                            key: best[key]
+                            for key in (
+                                "compute",
+                                "query_tile",
+                                "query_rows",
+                                "shared_splits",
+                            )
+                        },
                         "shared_median_us": best["median_us"],
                         "observed_speedup": baseline["median_us"] / best["median_us"]
                         if best["median_us"] > 0
@@ -1087,17 +1520,18 @@ def gpu_environment(torch):
     }
 
 
-def padded_geometry(args, snapshot, group, tile):
+def padded_geometry(args, snapshot, config):
     gqa = args.q_heads // args.kv_heads
-    block_m = max(16, 1 << (group * gqa - 1).bit_length())
-    groups = math.ceil(args.beams / group)
-    slots = math.ceil(len(snapshot.slots) / tile) * tile
+    block_m = 1 << (config["query_rows"] - 1).bit_length()
+    if config["compute"] == "dot":
+        block_m = max(16, block_m)
+    groups = math.ceil(args.beams * gqa / config["query_rows"])
+    slots = math.ceil(len(snapshot.slots) / config["tile"]) * config["tile"]
     valid_pairs = args.beams * args.steps * gqa
     return {
-        "group_beams": group,
-        "tile": tile,
+        **config,
         "block_m": block_m,
-        "blocks_per_request": groups * args.kv_heads,
+        "blocks_per_request": groups * args.kv_heads * config["shared_splits"],
         "padded_slots": slots,
         "padded_pair_ratio": groups * block_m * slots / valid_pairs
         if valid_pairs
@@ -1119,11 +1553,24 @@ def run_gpu(args):
         raise ValueError(
             "benchmark requires steps > 0; use gpu-check for empty history"
         )
-    torch, triton, shared_fwd, gather_fwd = load_cuda()
+    torch, triton, shared_module, gather_module = load_cuda(args.standalone)
+    shared_fwd = shared_module.beam_decode_attention_fwd
+    gather_fwd = gather_module.decode_attention_fwd
     dump_dir = Path(args.dump_dir) if args.dump_dir else None
     if dump_dir is not None:
         dump_dir.mkdir(parents=True, exist_ok=True)
     case = prepare_gpu_case(args, torch)
+    configs = shared_configs(args)
+    case["shared_workspace"] = {
+        split: (
+            torch.empty((split, *case["q"].shape), dtype=torch.float32, device="cuda"),
+            torch.empty(
+                (split, *case["q"].shape[:2]), dtype=torch.float32, device="cuda"
+            ),
+        )
+        for split in args.shared_splits
+        if split > 1
+    }
     baselines = {}
     if args.steps:
         for name, layout in (
@@ -1175,6 +1622,10 @@ def run_gpu(args):
             "shared_valid_slots": case["dense"]["valid"].numel(),
             "shared_output_and_lse": case["out"].numel() * case["out"].element_size()
             + case["lse"].numel() * 4,
+            "shared_workspace_by_split": {
+                str(split): sum(t.numel() * t.element_size() for t in workspace)
+                for split, workspace in case["shared_workspace"].items()
+            },
             "gather_workspace_by_variant": {
                 name: b["workspace_bytes"] for name, b in baselines.items()
             },
@@ -1183,12 +1634,10 @@ def run_gpu(args):
             },
         },
     }
-    from sglang.kernels.ops.attention import beam_decode_attention, decode_attention
-
     gather_jits = (
-        decode_attention._fwd_kernel_stage1,
-        decode_attention._fwd_grouped_kernel_stage1,
-        decode_attention._fwd_kernel_stage2,
+        gather_module._fwd_kernel_stage1,
+        gather_module._fwd_grouped_kernel_stage1,
+        gather_module._fwd_kernel_stage2,
     )
     compiled = []
     for baseline in baselines.values():
@@ -1199,30 +1648,47 @@ def run_gpu(args):
                 "kernels": inspect_compilation(baseline["run"], gather_jits, dump_dir),
             }
         )
-    for group in args.group_beams:
-        for tile in args.tile:
-            run, _ = shared_runner(args, case, shared_fwd, group, tile)
-            compiled.append(
-                {
-                    "method": "C_shared_scan",
-                    "group_beams": group,
-                    "tile": tile,
-                    "kernels": inspect_compilation(
-                        run, (beam_decode_attention._beam_decode_attention,), dump_dir
+    for config in configs:
+        run, _ = shared_runner(args, case, shared_fwd, config)
+        compiled.append(
+            {
+                "method": "C_shared_scan",
+                **config,
+                "kernels": inspect_compilation(
+                    run,
+                    (
+                        shared_module._beam_decode_attention,
+                        shared_module._merge_beam_splits,
                     ),
-                }
-            )
+                    dump_dir,
+                ),
+            }
+        )
     result["compiled_kernels"] = compiled
     result["compiler_note"] = (
         "PTX counts are static instructions, not executed counts; "
         "inspect SASS to confirm lowering; missing disassembly is reported explicitly"
     )
     result["padded_geometry"] = [
-        padded_geometry(args, snapshot, group, tile)
+        padded_geometry(args, snapshot, config)
         for snapshot in case["dense"]["snapshots"]
-        for group in args.group_beams
-        for tile in args.tile
+        for config in configs
     ]
+    result["source_hashes"] = {
+        name: hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
+        for name, module in (("shared", shared_module), ("gather", gather_module))
+    }
+    result["loader"] = (
+        "CUDA-only source subset; disabled PDL blocks removed, numeric bodies unchanged"
+        if args.standalone
+        else "SGLang runtime imports"
+    )
+    if args.standalone:
+        result["standalone_source"] = {
+            "loaded_gather_sha256": gather_module.loaded_source_sha256,
+            "pruned_pdl_blocks": gather_module.pruned_pdl_blocks,
+            "use_pdl": False,
+        }
     if args.mode == "gpu-check":
         return result
     scrub = (
@@ -1253,22 +1719,13 @@ def run_gpu(args):
                     baseline[scope],
                 )
             )
-    for group in args.group_beams:
-        for tile in args.tile:
-            run, total = shared_runner(args, case, shared_fwd, group, tile)
-            calls = {"run": run, "metadata": lambda: rebuild_mask(case), "total": total}
-            for scope in args.scopes:
-                workloads.append(
-                    (
-                        {
-                            "method": "C_shared_scan",
-                            "group_beams": group,
-                            "tile": tile,
-                            "scope": scope,
-                        },
-                        calls[scope],
-                    )
-                )
+    for config in configs:
+        run, total = shared_runner(args, case, shared_fwd, config)
+        calls = {"run": run, "metadata": lambda: rebuild_mask(case), "total": total}
+        for scope in args.scopes:
+            workloads.append(
+                ({"method": "C_shared_scan", **config, "scope": scope}, calls[scope])
+            )
     random.Random(args.seed).shuffle(workloads)
     for fields, call in workloads:
         for execution in executions:
@@ -1292,6 +1749,10 @@ def run_gpu(args):
         for group in args.group_beams
         for tile in args.tile
     ]
+    result["analytical_geometry_note"] = (
+        "uncapped conceptual beam groups only; "
+        "actual capped query/split geometry is in padded_geometry"
+    )
     result["hardware_counters"] = (
         "not collected; use Nsight Compute for sectors, L2/DRAM traffic, and occupancy"
     )
@@ -1299,6 +1760,88 @@ def run_gpu(args):
 
 
 def matrix_cases(preset):
+    if preset == "v100-tune":
+        common = {
+            "standalone": True,
+            "compute": ["dot", "simt"],
+            "group_beams": [4, 16],
+            "tile": [16, 32],
+            "shared_splits": [1, 2, 4],
+        }
+        return [
+            (name, mode, common | overrides)
+            for name, mode, overrides in (
+                (
+                    "check_mha",
+                    "gpu-check",
+                    {"beams": 9, "steps": 33, "scan_spacing": 2, "check_graph": True},
+                ),
+                (
+                    "check_gqa",
+                    "gpu-check",
+                    {
+                        "beams": 9,
+                        "steps": 33,
+                        "kv_heads": 2,
+                        "scan_spacing": 2,
+                        "check_graph": True,
+                    },
+                ),
+                (
+                    "check_empty",
+                    "gpu-check",
+                    {"beams": 1, "steps": 0, "check_graph": True},
+                ),
+                ("k8_shared", "benchmark", {"beams": 8, "steps": 128}),
+                ("k32_shared", "benchmark", {"beams": 32, "steps": 128}),
+                (
+                    "k32_independent",
+                    "benchmark",
+                    {"beams": 32, "steps": 128, "pattern": "independent"},
+                ),
+                (
+                    "k32_random",
+                    "benchmark",
+                    {"beams": 32, "steps": 128, "pattern": "random"},
+                ),
+                ("gqa_shared", "benchmark", {"beams": 32, "steps": 128, "kv_heads": 2}),
+                (
+                    "requests8_shared",
+                    "benchmark",
+                    {"beams": 32, "steps": 128, "requests": 8},
+                ),
+            )
+        ]
+    if preset == "compiler":
+        return [
+            (
+                name,
+                mode,
+                {
+                    "standalone": True,
+                    "compute": ["dot"],
+                    "group_beams": [4, 8, 16],
+                    "tile": [32, 64],
+                    "shared_splits": [1],
+                    "query_tile": 128,
+                }
+                | overrides,
+            )
+            for name, mode, overrides in (
+                (
+                    "compiler_check",
+                    "gpu-check",
+                    {"beams": 9, "steps": 33, "check_graph": True},
+                ),
+                ("compiler_k8", "benchmark", {"beams": 8, "steps": 128}),
+                ("compiler_k32", "benchmark", {"beams": 32, "steps": 128}),
+                (
+                    "compiler_requests8",
+                    "benchmark",
+                    {"beams": 32, "steps": 128, "requests": 8},
+                ),
+            )
+        ]
     cases = [
         (
             "check_mha_tails",
@@ -1428,6 +1971,8 @@ def matrix_commands(args):
             "group_beams": [4, 8, 16],
             "tile": [32, 64],
             "splits": [1, 2, 4],
+            "shared_splits": [1],
+            "compute": ["dot"],
             "execution": "graph",
             "graph_batch": args.graph_batch,
             "repeats": args.repeats,
@@ -1436,7 +1981,12 @@ def matrix_commands(args):
             "dump_dir": str(root / "kernels" / name),
             **overrides,
         }
-        command = [sys.executable, "-B", str(Path(__file__).resolve()), mode]
+        command = [
+            args.python or sys.executable,
+            "-B",
+            str(Path(__file__).resolve()),
+            mode,
+        ]
         for key, value in parameters.items():
             flag = "--" + key.replace("_", "-")
             if isinstance(value, bool):
@@ -1493,10 +2043,31 @@ def add_gpu_arguments(parser):
     parser.add_argument("--head-dim", type=int, choices=(64, 128), default=128)
     parser.add_argument("--dtype", choices=("float16", "bfloat16"), default="bfloat16")
     parser.add_argument(
-        "--group-beams", type=int, nargs="+", choices=(4, 8, 16), default=[4, 8, 16]
+        "--group-beams",
+        type=int,
+        nargs="+",
+        choices=(1, 2, 4, 8, 16),
+        default=[4, 8, 16],
     )
     parser.add_argument(
-        "--tile", type=int, nargs="+", choices=(32, 64, 128), default=[32, 64, 128]
+        "--tile", type=int, nargs="+", choices=(16, 32, 64, 128), default=[32, 64]
+    )
+    parser.add_argument(
+        "--compute", nargs="+", choices=("dot", "simt"), default=["dot"]
+    )
+    parser.add_argument(
+        "--query-tile",
+        type=int,
+        choices=(1, 2, 4, 8, 16, 32, 64, 128),
+        help="cap query rows per KV head; default dot=16, SIMT=4",
+    )
+    parser.add_argument(
+        "--shared-splits", type=int, nargs="+", choices=(1, 2, 4, 8), default=[1]
+    )
+    parser.add_argument(
+        "--standalone",
+        action="store_true",
+        help="load CUDA numeric kernels without importing the SGLang runtime",
     )
     parser.add_argument(
         "--scan-spacing",
@@ -1600,7 +2171,13 @@ def main(argv=None):
     matrix = subparsers.add_parser(
         "matrix", help="run a staged V100 matrix in isolated processes"
     )
-    matrix.add_argument("--preset", choices=("quick", "full"), default="quick")
+    matrix.add_argument(
+        "--preset", choices=("quick", "full", "v100-tune", "compiler"), default="quick"
+    )
+    matrix.add_argument(
+        "--python",
+        help="Python executable in an existing environment; installs nothing",
+    )
     matrix.add_argument(
         "--output-dir",
         required=True,
