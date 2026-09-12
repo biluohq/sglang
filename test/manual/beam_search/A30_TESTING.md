@@ -6,13 +6,15 @@
 
 | 模式 | 行为 |
 | --- | --- |
-| `gather` | 当前 SGLang Triton decode attention，逐 beam 读取自己的路径 |
-| `shared` | 按祖先树序分组，共同 decode 前缀共享加载，剩余路径 gather，最后合并 LSE |
+| `gather` | 精度匹配的实验基线：逐 beam 读取路径，MHA QK 在 kernel 内使用 FP32，输出和 LSE 一起合并 |
+| `shared` | 按祖先树序分组，共同 decode 前缀共享加载，剩余路径使用同一精度的 gather，最后合并 LSE |
 | `auto` | 在分组后，只有共同前缀长度和预计节省量达到固定阈值的组才共享 |
 
 不修改 beam selection、模型、生产 scheduler、KV allocator 或 VMM。输入是合成 Q/K/V 和合法的 parent-selection 轨迹，不是模型生成的真实输出。测试目标是通用 beam search，不是 SID 专用实现。
 
-- `beam_width=1` 只运行原 gather，跳过共享 metadata。
+- `beam_width=1` 只运行精度匹配的 gather，跳过共享 metadata。
+- 原始生产 `decode_attention.py` 不修改；独立加载器只对实验副本的 MHA QK 表达式做 FP32 提升，GQA 的 dot 数值路径不改，KV 仍以 FP16/BF16 存储。
+- gather、shared、auto 都采用同样严格的输出/LSE 校验。`gather` 的 stage-2 改用前缀为空的 LSE 合并 kernel，因此它不是历史记录中的未经修改的生产基线，旧结果不可直接混比。
 - `auto` 的零前缀组仍会经过 metadata、空前缀和合并 kernel，并非零成本切换到完整原路径。
 - 阈值尚未在 A30 上校准；`policy_status=loaded_candidate` 仅表示读取了配置文件，不表示该策略已经通过性能验收。
 - 开发机已通过 CPU 参考、调用参数、资源预算及命令行检查；A30 CUDA 编译、数值和性能必须由下面的 GPU 测试确认。
@@ -88,7 +90,9 @@ python -B test/manual/beam_search/test_beam_kv_attention.py matrix \
   --preset a30-smoke --output-dir "$RESULTS/smoke"
 ```
 
-4 个案例覆盖 k=1、非二次幂 MHA/GQA 和独立路径。除基本数值检查外，小宽度共享案例还检查 inactive query 与全共享边界。smoke 也有短性能采样，不是纯编译测试。
+5 个案例覆盖 k=1、原失败的零共享前缀 `mha_tail`、明确有共享前缀的 `mha_prefix`、GQA 和独立路径。`mha_prefix` 强制检查共同前缀非空；所有 smoke 案例额外校验合并前的有效 suffix/prefix 分段 LSE。小宽度共享案例还检查 inactive query 与全共享边界。smoke 也有短性能采样，不是纯编译测试。
+
+LSE 容差保持 `atol=1e-4, rtol=1e-4`，没有为了通过原失败案例而放宽。未写入的空 suffix partition 不参与 LSE 校验或合并；空 prefix partition 必须明确输出负无穷 LSE。
 
 先确认所有案例正确，检查编译信息中共享前缀 kernel 是否生成 MMA，再运行后续矩阵。出现失败时先定位，不要放宽 tolerance 或跳过失败项后宣布通过。
 
@@ -120,7 +124,7 @@ python -B test/manual/beam_search/test_beam_kv_attention.py matrix \
 
 | preset | 案例数 | 内容 |
 | --- | ---: | --- |
-| `a30-smoke` | 4 | 小规模正确性、编译与基本计时 |
+| `a30-smoke` | 5 | 零/正共享前缀、分段 LSE 正确性、编译与基本计时 |
 | `a30-calibrate` | 39 | 有限 kernel 配置校准 |
 | `a30-main` | 330 | 11 个宽度 × 5 个输出长度 × 3 种共享形态 × MHA/GQA |
 | `a30-stress` | 150 | 5 个大宽度 × 同样的长度、共享形态和 head 配置 |
@@ -147,6 +151,21 @@ python -B test/manual/beam_search/test_beam_kv_attention.py a30-case \
 ```
 
 `query-tile` 限制每个 KV head 对应的 query 行数，不是 beam 数。组大小为 `min(beams, floor(query_tile / GQA_ratio))`；尾组允许不足额。prefix split 与 suffix split 是两个独立参数。
+
+### 原始 gather 诊断对照
+
+如需复现原始 MHA LSE 偏差并保留原生产调用的时间，运行：
+
+```bash
+python -B test/manual/beam_search/test_beam_kv_attention.py a30-case \
+  --beams 3 --output-tokens 16 --pattern grouped \
+  --original-diagnostic --check-partial-lse \
+  --output "$RESULTS/manual/mha_precision_diagnostic.json"
+```
+
+`original_gather_diagnostics` 单独报告原始输出/LSE 误差与 attention-only 时间。原始 LSE 超过严格容差会记录为诊断失败，不冒称通过，也不参与主性能加速比；新的 gather/shared/auto 则必须全部通过严格检查才能返回成功。原始时间不含诊断用的额外 LSE 提取，因此不能与包含 LSE 输出或 metadata 的 total 直接比较。
+
+此选项不会转换整个 KV buffer 到 FP32，也不修改源文件。`loaded_gather_sha256` 和 `precision_contract` 用于区分实际执行的数值路径。
 
 ### 冻结策略
 
@@ -260,7 +279,9 @@ python -B test/manual/beam_search/test_beam_kv_attention.py a30-case \
 
 | 字段 | 解读 |
 | --- | --- |
-| `correctness` | 输出误差；共享路径还检查 LSE，trace 检查路径和树序 |
+| `correctness` | 所有主路径的输出/LSE 误差；smoke 包含分段 LSE，trace 检查路径和树序 |
+| `precision_contract` | FP16/BF16 存储、实验 MHA FP32 QK 和统一容差；明确基线不是原生产数值路径 |
+| `original_gather_diagnostics` | 可选原始 gather 诊断，独立于主路径的正确性与性能验收 |
 | `grouping` | 共同前缀长度、选中组数、逻辑 KV 引用量 |
 | `global_common_prefix` / `ancestor_counts_by_depth` | 区分全局共享和子树共享 |
 | `timings.scope=metadata` | 排序、共同前缀识别和路径准备 |
@@ -280,7 +301,7 @@ PTX MMA 计数是静态指令数，不是 Tensor Core 利用率；spill 不是�
 
 ## 8. 失败处理与回传
 
-1. 首先保留失败日志和 manifest，不覆盖旧目录。
+1. 首先保留失败日志和 manifest，不覆盖旧目录。使用新矩阵入口重跑，历史结果目录中的 `run_suite.py` 固定了旧 smoke 数量，不是当前测试驱动。
 2. 数值失败记录 dtype、case、配置、软件版本；不要直接放宽容差。
 3. CUDA illegal access 后重启案例进程；矩阵本身已按案例隔离进程。
 4. SASS 导出失败检查 JSON 中的 `sass_unavailable`，与数值测试失败分开处理。

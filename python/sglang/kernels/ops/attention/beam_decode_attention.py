@@ -341,20 +341,25 @@ def _merge_prefix_suffix(
     PREFIX_SPLITS: tl.constexpr,
     SUFFIX_SPLITS: tl.constexpr,
     BLOCK_SPLITS: tl.constexpr,
+    HAS_PREFIX: tl.constexpr,
 ):
     row = tl.program_id(0).to(tl.int64)
     head = tl.program_id(1)
     active = tl.load(Active + row)
     ids = tl.arange(0, BLOCK_SPLITS)
     dims = tl.arange(0, DIM)
-    pvalid = ids < PREFIX_SPLITS
-    pindex = (ids * ROWS + row) * HEADS + head
-    plse = tl.load(PrefixLSE + pindex, pvalid & active, other=-float("inf"))
-    pout = tl.load(
-        PrefixOut + pindex[:, None] * DIM + dims[None, :],
-        pvalid[:, None] & active,
-        other=0.0,
-    )
+    if HAS_PREFIX:
+        pvalid = ids < PREFIX_SPLITS
+        pindex = (ids * ROWS + row) * HEADS + head
+        plse = tl.load(PrefixLSE + pindex, pvalid & active, other=-float("inf"))
+        pout = tl.load(
+            PrefixOut + pindex[:, None] * DIM + dims[None, :],
+            pvalid[:, None] & active,
+            other=0.0,
+        )
+    else:
+        plse = tl.full((BLOCK_SPLITS,), -float("inf"), tl.float32)
+        pout = tl.zeros((BLOCK_SPLITS, DIM), tl.float32)
     suffix_len = tl.load(Indptr + row + 1) - tl.load(Indptr + row)
     suffix_chunk = tl.cdiv(tl.cdiv(suffix_len, SUFFIX_SPLITS), 32) * 32
     svalid = (ids < SUFFIX_SPLITS) & (ids * suffix_chunk < suffix_len) & active
@@ -478,7 +483,7 @@ def shared_prefix_attention(
 def merge_prefix_suffix(
     prefix, prefix_lse, suffix, suffix_lse, indptr, active, out, lse
 ):
-    ps, ss = prefix.shape[0], suffix.shape[2]
+    ps, ss = prefix.shape[0] if prefix is not None else 0, suffix.shape[2]
     _merge_prefix_suffix[(out.shape[0], out.shape[1])](
         prefix,
         prefix_lse,
@@ -494,6 +499,7 @@ def merge_prefix_suffix(
         PREFIX_SPLITS=ps,
         SUFFIX_SPLITS=ss,
         BLOCK_SPLITS=triton.next_power_of_2(max(ps, ss)),
+        HAS_PREFIX=ps > 0,
         num_warps=4,
     )
 

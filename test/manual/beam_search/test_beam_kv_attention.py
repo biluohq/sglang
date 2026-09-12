@@ -707,6 +707,7 @@ class TestBenchmarkHarness(unittest.TestCase):
         isolated_names = (
             "beam_experiment_shared",
             "beam_experiment_gather",
+            "beam_experiment_gather_fp32",
             "beam_experiment_score_mod",
         )
         with patch.dict(
@@ -724,6 +725,19 @@ class TestBenchmarkHarness(unittest.TestCase):
                         )
                     )
                     self.assertNotIn("tl.extra.cuda.gdc_", loaded)
+                _, precise = load_standalone_kernels(torch, triton, mha_qk_fp32=True)
+                self.assertTrue(precise.mha_qk_fp32)
+                self.assertFalse(gather.mha_qk_fp32)
+                self.assertEqual(precise.source_sha256, gather.source_sha256)
+                self.assertNotEqual(
+                    precise.loaded_source_sha256, gather.loaded_source_sha256
+                )
+                source = "".join(
+                    linecache.getlines(
+                        precise._fwd_kernel_stage1.fn.__code__.co_filename
+                    )
+                )
+                self.assertIn("q.to(tl.float32)[None, :] * k.to(tl.float32)", source)
                 for kv_heads, expected_stage in (
                     (8, "_fwd_kernel_stage1"),
                     (2, "_fwd_grouped_kernel_stage1"),
@@ -832,6 +846,20 @@ class TestBenchmarkHarness(unittest.TestCase):
                 )
                 self.assertEqual(launches[1][0], "_merge_prefix_suffix")
                 self.assertEqual(launches[1][2]["BLOCK_SPLITS"], 4)
+                self.assertTrue(launches[1][2]["HAS_PREFIX"])
+                shared.merge_prefix_suffix(
+                    None,
+                    None,
+                    TensorShape((18, 8, 4, 128), "float32"),
+                    TensorShape((18, 8, 4), "float32"),
+                    None,
+                    None,
+                    q,
+                    TensorShape((18, 8), "float32"),
+                )
+                self.assertFalse(launches[2][2]["HAS_PREFIX"])
+                self.assertEqual(launches[2][2]["PREFIX_SPLITS"], 0)
+                launches.pop()
                 torch.sub, torch.cumsum = Mock(), Mock()
                 shared.group_prefix_metadata(
                     paths,
@@ -892,7 +920,9 @@ class TestBenchmarkHarness(unittest.TestCase):
         self.assertEqual(len(matrix_cases("v100-tune")), 9)
 
 
-def load_source_subset(path, module_name, functions, constants, namespace):
+def load_source_subset(
+    path, module_name, functions, constants, namespace, *, mha_qk_fp32=False
+):
     source = path.read_text()
     tree = ast.parse(source, filename=str(path))
     selected, found = [], set()
@@ -919,7 +949,7 @@ def load_source_subset(path, module_name, functions, constants, namespace):
     ]
     loaded_source = source
     filename = str(path)
-    if pdl_blocks:
+    if pdl_blocks or mha_qk_fp32:
         lines = source.splitlines(keepends=True)
         for node in pdl_blocks:
             if node.orelse:
@@ -929,8 +959,10 @@ def load_source_subset(path, module_name, functions, constants, namespace):
             lines[node.lineno - 1] = " " * node.col_offset + "pass\n"
             for i in range(node.lineno, node.end_lineno):
                 lines[i] = "\n"
+        if mha_qk_fp32:
+            promote_mha_qk(lines, selected)
         loaded_source = "".join(lines)
-        filename = f"{path}::<standalone-no-pdl>"
+        filename = f"{path}::<{module_name}>"
         linecache.cache[filename] = (len(loaded_source), None, lines, filename)
         reparsed = ast.parse(loaded_source, filename=filename)
         starts = {node.lineno for node in selected}
@@ -939,7 +971,7 @@ def load_source_subset(path, module_name, functions, constants, namespace):
     module.__file__ = str(path)
     module.__dict__.update(namespace)
     sys.modules[module_name] = module
-    # Triton inspects cached source; it must match the disabled-PDL specialization.
+    # Triton inspection must see the same specialized source as Python execution.
     exec(
         compile(
             ast.Module(body=selected, type_ignores=[]),
@@ -952,10 +984,41 @@ def load_source_subset(path, module_name, functions, constants, namespace):
     module.source_sha256 = hashlib.sha256(source.encode()).hexdigest()
     module.loaded_source_sha256 = hashlib.sha256(loaded_source.encode()).hexdigest()
     module.pruned_pdl_blocks = len(pdl_blocks)
+    module.mha_qk_fp32 = mha_qk_fp32
     return module
 
 
-def load_standalone_kernels(torch, triton):
+def promote_mha_qk(lines, definitions):
+    kernel = next(
+        (
+            node
+            for node in definitions
+            if isinstance(node, ast.FunctionDef) and node.name == "_fwd_kernel_stage1"
+        ),
+        None,
+    )
+    if kernel is None:
+        raise RuntimeError("FP32 QK specialization requires the original MHA stage-1")
+    expected = ast.dump(ast.parse("qk = tl.sum(q[None, :] * k, 1)").body[0])
+    matches = [
+        node
+        for node in ast.walk(kernel)
+        if isinstance(node, ast.Assign) and ast.dump(node) == expected
+    ]
+    if len(matches) != 1 or matches[0].lineno != matches[0].end_lineno:
+        raise RuntimeError(
+            "MHA QK expression changed; review the precision specialization"
+        )
+    node = matches[0]
+    lines[node.lineno - 1] = (
+        " "
+        * node.col_offset
+        + "qk = tl.sum(q.to(tl.float32)[None, :] * k.to(tl.float32), "
+        "1, dtype=tl.float32)\n"
+    )
+
+
+def load_standalone_kernels(torch, triton, *, mha_qk_fp32=False):
     from typing import Tuple
 
     import triton.language as tl
@@ -977,7 +1040,7 @@ def load_standalone_kernels(torch, triton):
     )
     gather = load_source_subset(
         root / "decode_attention.py",
-        "beam_experiment_gather",
+        "beam_experiment_gather_fp32" if mha_qk_fp32 else "beam_experiment_gather",
         [
             "tanh",
             "_grouped_head_tiles",
@@ -1005,11 +1068,12 @@ def load_standalone_kernels(torch, triton):
             "logger": logging.getLogger("beam_experiment_gather"),
             "unpack_aux_tensors": auxiliary.unpack_aux_tensors,
         },
+        mha_qk_fp32=mha_qk_fp32,
     )
     return shared, gather
 
 
-def load_cuda(standalone=False):
+def load_cuda(standalone=False, *, mha_qk_fp32=False):
     try:
         import torch
         import triton
@@ -1023,7 +1087,7 @@ def load_cuda(standalone=False):
             "GPU modes require an NVIDIA CUDA GPU; no GPU checks were run"
         )
     if standalone:
-        shared, gather = load_standalone_kernels(torch, triton)
+        shared, gather = load_standalone_kernels(torch, triton, mha_qk_fp32=mha_qk_fp32)
     else:
         sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python"))
         try:
@@ -2057,6 +2121,8 @@ def matrix_commands(args):
             }
             if args.preset in ("a30-smoke", "a30-calibrate"):
                 parameters["dump_dir"] = str(root / "kernels" / name)
+            if args.preset == "a30-smoke":
+                parameters["check_partial_lse"] = True
             if args.policy:
                 parameters["policy"] = args.policy
         command = [
@@ -2359,6 +2425,15 @@ def a30_cases(preset):
         return [
             ("single", {"beams": 1, "output_tokens": 3}),
             ("mha_tail", {"beams": 3, "output_tokens": 16, "pattern": "grouped"}),
+            (
+                "mha_prefix",
+                {
+                    "beams": 3,
+                    "output_tokens": 64,
+                    "pattern": "shared",
+                    "require_shared_prefix": True,
+                },
+            ),
             ("gqa_tail", {"beams": 6, "output_tokens": 32, "kv_heads": 2}),
             (
                 "independent",
@@ -2464,6 +2539,74 @@ def a30_reference(torch, q, k, v, paths, length, out, lse, chunk_rows):
         lse[start:end] = torch.logsumexp(scores, -1)
 
 
+def check_a30_partial_lse(
+    torch,
+    q,
+    k,
+    indptr,
+    indices,
+    partial_lse,
+    prefix_lse,
+    paths,
+    row_prefix,
+    prompt_len,
+    prefix_tile,
+    chunk_rows,
+):
+    head_map = torch.arange(q.shape[1], device=q.device) // (q.shape[1] // k.shape[1])
+    ptr = indptr.cpu().tolist()
+    counts = row_prefix.cpu().tolist() if prefix_lse is not None else [0] * q.shape[0]
+    max_errors = {"suffix": 0.0, "prefix": 0.0}
+    for start in range(0, q.shape[0], chunk_rows):
+        for row in range(start, min(start + chunk_rows, q.shape[0])):
+            suffix_length = ptr[row + 1] - ptr[row]
+            suffix_splits = partial_lse.shape[2]
+            span = math.ceil(math.ceil(suffix_length / suffix_splits) / 32) * 32
+            for split in range(suffix_splits):
+                begin, end = split * span, min((split + 1) * span, suffix_length)
+                if begin >= end:
+                    continue
+                slots = indices[ptr[row] + begin : ptr[row] + end].long()
+                keys = k[slots][:, head_map, :].double()
+                expected = torch.logsumexp(
+                    torch.einsum("hd,thd->ht", q[row].double(), keys)
+                    / math.sqrt(q.shape[2]),
+                    -1,
+                )
+                actual = partial_lse[row, :, split].double()
+                torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+                max_errors["suffix"] = max(
+                    max_errors["suffix"], (actual - expected).abs().max().item()
+                )
+            if prefix_lse is None:
+                continue
+            span = (
+                math.ceil(math.ceil(counts[row] / prefix_tile) / prefix_lse.shape[0])
+                * prefix_tile
+            )
+            for split in range(prefix_lse.shape[0]):
+                begin, end = split * span, min((split + 1) * span, counts[row])
+                actual = prefix_lse[split, row].double()
+                if begin >= end:
+                    if not torch.isneginf(actual).all().item():
+                        raise AssertionError(
+                            "empty prefix partition must have negative infinite LSE"
+                        )
+                    continue
+                slots = paths[row, prompt_len + begin : prompt_len + end].long()
+                keys = k[slots][:, head_map, :].double()
+                expected = torch.logsumexp(
+                    torch.einsum("hd,thd->ht", q[row].double(), keys)
+                    / math.sqrt(q.shape[2]),
+                    -1,
+                )
+                torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+                max_errors["prefix"] = max(
+                    max_errors["prefix"], (actual - expected).abs().max().item()
+                )
+    return max_errors
+
+
 def parse_parent_trace(raw, requests, depth, beams):
     data = raw.get("parents") if isinstance(raw, dict) else None
     if not isinstance(data, list) or len(data) != requests:
@@ -2542,11 +2685,18 @@ def run_a30(args):
         raise ValueError("query tile must accommodate an integral GQA head group")
     if "gather" not in args.modes or len(set(args.modes)) != len(args.modes):
         raise ValueError("modes must be unique and include the gather baseline")
+    if args.require_shared_prefix and ("shared" not in args.modes or args.beams < 2):
+        raise ValueError(
+            "--require-shared-prefix needs shared mode and at least two beams"
+        )
     if args.graph_batch < 1 or args.eviction_mib < 1:
         raise ValueError("graph_batch and eviction_mib must be positive")
     if not 0 < args.memory_fraction <= 0.8 or args.memory_gib <= 0:
         raise ValueError("memory fraction must be in (0, 0.8] and memory GiB positive")
-    torch, triton, shared, gather = load_cuda(True)
+    torch, triton, shared, gather = load_cuda(True, mha_qk_fp32=True)
+    original_gather = None
+    if args.original_diagnostic:
+        shared, original_gather = load_standalone_kernels(torch, triton)
     if torch.cuda.get_device_capability()[0] < 8:
         raise ValueError(
             "A30 experiments require SM80 or newer; use the V100 presets on SM70"
@@ -2592,6 +2742,21 @@ def run_a30(args):
         else "uncalibrated_candidate",
         "policy": policy,
         "scope": "attention only; no model, top-k, VMM, or serving integration",
+        "precision_contract": {
+            "mha_qk": (
+                "FP16/BF16 storage, FP32 multiplication/reduction/scaling "
+                "in the experimental gather clone"
+            ),
+            "gqa_qk": "unchanged Tensor Core dot with FP32 accumulation",
+            "gather": (
+                "precision-matched stage-1 plus prefix-free LSE merge; "
+                "not the unmodified serving baseline"
+            ),
+            "lse_atol": 1e-4,
+            "lse_rtol": 1e-4,
+            "output_atol": 0.01 if args.dtype == "bfloat16" else 0.002,
+            "output_rtol": 0.01 if args.dtype == "bfloat16" else 0.002,
+        },
         "trace_timing": (
             "sum of per-step replay medians with fixed prior-step snapshots; "
             "parent uploads and prior-path snapshots excluded from GPU intervals"
@@ -2791,22 +2956,27 @@ def run_a30(args):
         part_lse = suffix_lse_workspace[: rows * args.q_heads * split].view(
             rows, args.q_heads, split
         )
+        stage = (
+            gather._decode_att_m_fwd
+            if args.q_heads == args.kv_heads
+            else gather._decode_grouped_att_m_fwd
+        )
         if mode == "gather" or args.beams == 1:
-            gather.decode_attention_fwd(
+            stage(
                 q,
                 k,
                 v,
-                out,
-                baseline_indptr,
-                baseline_indices,
                 part,
                 part_lse,
+                baseline_indptr,
+                baseline_indices,
                 split_tensor,
                 split,
                 1 / math.sqrt(args.head_dim),
-                1.0,
-                1.0,
-                enable_lean=False,
+                0.0,
+            )
+            shared.merge_prefix_suffix(
+                None, None, part, part_lse, baseline_indptr, active, out, lse
             )
             return
         shared.shared_prefix_attention(
@@ -2826,11 +2996,6 @@ def run_a30(args):
             prompt_len=args.prompt_len,
             num_warps=args.warps,
             num_stages=args.stages,
-        )
-        stage = (
-            gather._decode_att_m_fwd
-            if args.q_heads == args.kv_heads
-            else gather._decode_grouped_att_m_fwd
         )
         stage(
             q,
@@ -2856,11 +3021,109 @@ def run_a30(args):
     )
     modes = ("gather",) if args.beams == 1 else tuple(args.modes)
     tests, timings, diagnostics, group_reports = [], [], [], []
+    original_reports = []
     ref_out = torch.empty_like(layer_data[0][0], dtype=torch.float64)
     ref_lse = torch.empty(
         layer_data[0][0].shape[:2], dtype=torch.float64, device="cuda"
     )
     tolerance = 0.01 if dtype == torch.bfloat16 else 0.002
+    if original_gather is not None:
+        metadata("gather")
+        for split in args.splits:
+            split_tensor.fill_(split)
+            part = suffix_workspace[: rows * args.q_heads * split * args.head_dim].view(
+                rows, args.q_heads, split, args.head_dim
+            )
+            part_lse = suffix_lse_workspace[: rows * args.q_heads * split].view(
+                rows, args.q_heads, split
+            )
+            records = []
+
+            def original_call(data):
+                q, k, v, out, _ = data
+                original_gather.decode_attention_fwd(
+                    q,
+                    k,
+                    v,
+                    out,
+                    baseline_indptr,
+                    baseline_indices,
+                    part,
+                    part_lse,
+                    split_tensor,
+                    split,
+                    1 / math.sqrt(args.head_dim),
+                    1.0,
+                    1.0,
+                    enable_lean=False,
+                )
+
+            for layer, data in enumerate(layer_data):
+                original_call(data)
+                a30_reference(
+                    torch,
+                    *data[:3],
+                    paths,
+                    width,
+                    ref_out,
+                    ref_lse,
+                    args.reference_rows,
+                )
+                output_error = (data[3].double() - ref_out).abs().max().item()
+                output_close = torch.allclose(
+                    data[3].double(), ref_out, atol=tolerance, rtol=tolerance
+                )
+                shared.merge_prefix_suffix(
+                    None,
+                    None,
+                    part,
+                    part_lse,
+                    baseline_indptr,
+                    active,
+                    data[3],
+                    data[4],
+                )
+                records.append(
+                    {
+                        "layer": layer,
+                        "max_abs_error": output_error,
+                        "output_matches_tolerance": output_close,
+                        "max_lse_abs_error": (data[4].double() - ref_lse)
+                        .abs()
+                        .max()
+                        .item(),
+                        "lse_matches_strict_tolerance": torch.allclose(
+                            data[4].double(), ref_lse, atol=1e-4, rtol=1e-4
+                        ),
+                    }
+                )
+
+            def original_compute():
+                for data in layer_data:
+                    original_call(data)
+
+            original_reports.append(
+                {
+                    "mode": "gather_original_diagnostic",
+                    "split": split,
+                    "precision_certified": False,
+                    "correctness": records,
+                    "scope": (
+                        "unmodified gather attention only; "
+                        "LSE extraction excluded from timing"
+                    ),
+                    "timing": measure_cuda(
+                        torch,
+                        original_compute,
+                        args.warmup,
+                        args.repeats,
+                        scrub,
+                        args.execution,
+                        args.graph_batch,
+                    ),
+                    "loaded_gather_sha256": original_gather.loaded_source_sha256,
+                }
+            )
     for mode in modes:
         metadata(mode)
         if mode != "gather":
@@ -2881,6 +3144,12 @@ def run_a30(args):
                 prefix.cpu(), torch.tensor(expected, dtype=torch.int32), rtol=0, atol=0
             )
             selected_prefixes = prefix.cpu().tolist()
+            if (
+                mode == "shared"
+                and args.require_shared_prefix
+                and not any(selected_prefixes)
+            ):
+                raise AssertionError("smoke case must execute a nonempty shared prefix")
             sizes = [
                 min(group_beams, args.beams - start)
                 for _ in range(args.requests)
@@ -2919,9 +3188,26 @@ def run_a30(args):
                 torch.testing.assert_close(
                     data[3].double(), ref_out, atol=tolerance, rtol=tolerance
                 )
-                if mode != "gather":
-                    torch.testing.assert_close(
-                        data[4].double(), ref_lse, atol=1e-4, rtol=1e-4
+                torch.testing.assert_close(
+                    data[4].double(), ref_lse, atol=1e-4, rtol=1e-4
+                )
+                partial_errors = None
+                if args.check_partial_lse:
+                    partial_errors = check_a30_partial_lse(
+                        torch,
+                        data[0],
+                        data[1],
+                        baseline_indptr if mode == "gather" else indptr,
+                        baseline_indices if mode == "gather" else suffix_indices,
+                        suffix_lse_workspace[: rows * args.q_heads * split].view(
+                            rows, args.q_heads, split
+                        ),
+                        None if mode == "gather" else pref_lse,
+                        paths,
+                        row_prefix,
+                        args.prompt_len,
+                        args.tile,
+                        args.reference_rows,
                     )
                 if mode != "gather" and args.beams <= 12 and args.layers == 1:
                     active[-1] = False
@@ -2996,6 +3282,12 @@ def run_a30(args):
                         .abs()
                         .max()
                         .item(),
+                        "max_lse_abs_error": (data[4].double() - ref_lse)
+                        .abs()
+                        .max()
+                        .item(),
+                        "precision": "matched_fp32_qk",
+                        "partial_lse_max_abs_error": partial_errors,
                     }
                 )
 
@@ -3152,10 +3444,9 @@ def run_a30(args):
                         torch.testing.assert_close(
                             data[3].double(), ref_out, atol=tolerance, rtol=tolerance
                         )
-                        if mode != "gather":
-                            torch.testing.assert_close(
-                                data[4].double(), ref_lse, atol=1e-4, rtol=1e-4
-                            )
+                        torch.testing.assert_close(
+                            data[4].double(), ref_lse, atol=1e-4, rtol=1e-4
+                        )
 
                     def step_total():
                         advance()
@@ -3227,6 +3518,7 @@ def run_a30(args):
         "timings": timings,
         "comparisons": summary,
         "compiled_kernels": diagnostics,
+        "original_gather_diagnostics": original_reports,
         "grouping": group_reports,
         "cpu_fixture_build_ms": cpu_build_ms,
         "live_beam_nodes": [s[2] for s in snapshots],
@@ -3267,6 +3559,63 @@ def run_a30(args):
 
 
 class TestA30Grouping(unittest.TestCase):
+    def test_qk_promotion_changes_only_the_mha_expression(self):
+        source = (
+            "def _fwd_kernel_stage1(q, k):\n"
+            "    qk = tl.sum(q[None, :] * k, 1)\n"
+            "    qk *= sm_scale_withk\n"
+            "def _fwd_grouped_kernel_stage1(q, k):\n"
+            "    qk = tl.dot(q, k)\n"
+        )
+        lines = source.splitlines(keepends=True)
+        promote_mha_qk(lines, ast.parse(source).body)
+        self.assertEqual(len(lines), len(source.splitlines()))
+        self.assertEqual(lines[0], source.splitlines(keepends=True)[0])
+        self.assertEqual(lines[2:], source.splitlines(keepends=True)[2:])
+        expression = ast.parse("".join(lines)).body[0].body[0].value
+        self.assertEqual(
+            ast.unparse(expression.args[0]),
+            "q.to(tl.float32)[None, :] * k.to(tl.float32)",
+        )
+        self.assertEqual(ast.unparse(expression.keywords[0].value), "tl.float32")
+        changed = source.replace("q[None, :] * k", "q[None, :] + k")
+        with self.assertRaises(RuntimeError):
+            promote_mha_qk(changed.splitlines(keepends=True), ast.parse(changed).body)
+
+    def test_smoke_has_zero_and_positive_prefix_regressions(self):
+        cases = dict(a30_cases("a30-smoke"))
+        self.assertEqual(len(cases), 5)
+        for name, expect_positive in (("mha_tail", False), ("mha_prefix", True)):
+            c = cases[name]
+            depth = c["output_tokens"] - 1
+            paths, order, _ = trace_snapshot(
+                parent_trace(c["beams"], depth, c["pattern"], 43), c["beams"], depth
+            )
+            common = group_prefix_oracle(paths, order, c["beams"], depth, c["beams"])
+            self.assertEqual(any(common), expect_positive)
+        self.assertTrue(cases["mha_prefix"]["require_shared_prefix"])
+
+    def test_prefix_free_lse_merge_matches_full_path(self):
+        rng = random.Random(7)
+        q = [rng.uniform(-1, 1) for _ in range(8)]
+        keys = [[rng.uniform(-1, 1) for _ in q] for _ in range(67)]
+        values = [[rng.uniform(-1, 1) for _ in q] for _ in keys]
+        for length, splits in itertools.product((0, 1, 15, 33, 67), (1, 2, 4, 8)):
+            span = math.ceil(math.ceil(length / splits) / 32) * 32
+            merged = ([0.0] * len(q), -math.inf)
+            for split in range(splits):
+                path = list(range(split * span, min((split + 1) * span, length)))
+                merged = merge_states(
+                    merged, reference_attention(q, keys, values, path)
+                )
+            expected = reference_attention(q, keys, values, list(range(length)))
+            for a, b in zip(merged[0], expected[0]):
+                self.assertAlmostEqual(a, b, places=12)
+            if length:
+                self.assertAlmostEqual(merged[1], expected[1], places=12)
+            else:
+                self.assertEqual(merged[1], -math.inf)
+
     def test_parent_trace_input_validation(self):
         valid = {"parents": [[[0, 1], [1, 1]]]}
         actual = parse_parent_trace(valid, 1, 2, 2)
@@ -3473,6 +3822,21 @@ def add_a30_arguments(parser):
     parser.add_argument("--memory-gib", type=float, default=16)
     parser.add_argument("--memory-fraction", type=float, default=0.7)
     parser.add_argument("--reference-rows", type=int, default=1)
+    parser.add_argument(
+        "--original-diagnostic",
+        action="store_true",
+        help="measure original gather separately; its LSE is not precision-certified",
+    )
+    parser.add_argument(
+        "--require-shared-prefix",
+        action="store_true",
+        help="require a nonempty shared prefix in forced-shared mode",
+    )
+    parser.add_argument(
+        "--check-partial-lse",
+        action="store_true",
+        help="validate stage-1 LSE before merging; intended for smoke cases",
+    )
     parser.add_argument("--prompt-len", type=int, default=0)
     parser.add_argument("--trace", action="store_true")
     parser.add_argument(
