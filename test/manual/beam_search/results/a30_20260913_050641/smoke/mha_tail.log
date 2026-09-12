@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/test_beam_kv_attention.py", line 3601, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/test_beam_kv_attention.py", line 3574, in main
+    result = run_a30(args) if args.mode == "a30-case" else run_gpu(args)
+             ^^^^^^^^^^^^^
+  File "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/test_beam_kv_attention.py", line 2923, in run_a30
+    torch.testing.assert_close(
+  File "/usr/local/lib/python3.11/dist-packages/torch/testing/_comparison.py", line 1519, in assert_close
+    raise error_metas[0].to_error(msg)
+AssertionError: Tensor-likes are not close!
+
+Mismatched elements: 4 / 24 (16.7%)
+Greatest absolute difference: 0.0009704748198977597 at index (1, 4) (up to 0.0001 allowed)
+Greatest relative difference: 0.00034664241475592874 at index (1, 4) (up to 0.0001 allowed)

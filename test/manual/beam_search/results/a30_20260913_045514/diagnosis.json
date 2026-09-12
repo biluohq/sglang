@@ -1,0 +1,132 @@
+{
+  "status": "reproduced_failure",
+  "error": "Tensor-likes are not close!\n\nMismatched elements: 4 / 24 (16.7%)\nGreatest absolute difference: 0.0009704748198977597 at index (1, 4) (up to 0.0001 allowed)\nGreatest relative difference: 0.00034664241475592874 at index (1, 4) (up to 0.0001 allowed)",
+  "mode": "shared",
+  "split": 1,
+  "layer": 0,
+  "parameters": {
+    "mode": "a30-case",
+    "beams": 3,
+    "output_tokens": 16,
+    "requests": 1,
+    "pattern": "grouped",
+    "seed": 43,
+    "q_heads": 8,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "dtype": "float16",
+    "layers": 1,
+    "query_tile": 16,
+    "tile": 32,
+    "prefix_splits": 2,
+    "warps": 4,
+    "stages": 2,
+    "splits": [
+      1,
+      2,
+      4
+    ],
+    "min_prefix": 16,
+    "min_saved": 128,
+    "policy": null,
+    "modes": [
+      "gather",
+      "shared",
+      "auto"
+    ],
+    "memory_gib": 16,
+    "memory_fraction": 0.7,
+    "reference_rows": 1,
+    "prompt_len": 0,
+    "trace": false,
+    "parent_trace": null,
+    "execution": "graph",
+    "graph_batch": 64,
+    "warmup": 5,
+    "repeats": 20,
+    "cache_mode": "warm",
+    "eviction_mib": 256,
+    "output": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_case.json",
+    "dump_dir": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels"
+  },
+  "row_prefix": [
+    0,
+    0,
+    0
+  ],
+  "merged_lse_max_abs_error": 0.0009704748198977597,
+  "suffix_lse_error_vs_fp64_products": 0.0009704748198977597,
+  "suffix_lse_error_vs_fp16_products": 0.0009946262189428623,
+  "compiled_kernels": [
+    {
+      "name": "_shared_prefix_attention",
+      "hash": "8f21d5074b19a7d6985c0e40c455e70762e8ba51cdf783f33421f01ec25e05bb",
+      "grid": [
+        1,
+        8,
+        2
+      ],
+      "target": "GPUTarget(backend='cuda', arch=80, warp_size=32)",
+      "registers_per_thread": 128,
+      "spills_reported_by_triton": 0,
+      "shared_memory_bytes": 21504,
+      "num_warps": 4,
+      "num_stages": 2,
+      "ptx_mma_instruction_count": 16,
+      "ptx_fma_instruction_count": 26,
+      "files": {
+        "ptx": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_shared_prefix_attention-8f21d5074b19a7d6985c0e40c455e70762e8ba51cdf783f33421f01ec25e05bb.ptx",
+        "ttgir": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_shared_prefix_attention-8f21d5074b19a7d6985c0e40c455e70762e8ba51cdf783f33421f01ec25e05bb.ttgir",
+        "cubin": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_shared_prefix_attention-8f21d5074b19a7d6985c0e40c455e70762e8ba51cdf783f33421f01ec25e05bb.cubin",
+        "sass": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_shared_prefix_attention-8f21d5074b19a7d6985c0e40c455e70762e8ba51cdf783f33421f01ec25e05bb.sass"
+      }
+    },
+    {
+      "name": "_fwd_kernel_stage1",
+      "hash": "2d834677ec46f6c6bc49637f3d83d29d6e71cd84049627b5f0f9fde0059fc33a",
+      "grid": [
+        3,
+        8,
+        1
+      ],
+      "target": "GPUTarget(backend='cuda', arch=80, warp_size=32)",
+      "registers_per_thread": 80,
+      "spills_reported_by_triton": 0,
+      "shared_memory_bytes": 2048,
+      "num_warps": 4,
+      "num_stages": 2,
+      "ptx_mma_instruction_count": 0,
+      "ptx_fma_instruction_count": 133,
+      "files": {
+        "ptx": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_fwd_kernel_stage1-2d834677ec46f6c6bc49637f3d83d29d6e71cd84049627b5f0f9fde0059fc33a.ptx",
+        "ttgir": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_fwd_kernel_stage1-2d834677ec46f6c6bc49637f3d83d29d6e71cd84049627b5f0f9fde0059fc33a.ttgir",
+        "cubin": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_fwd_kernel_stage1-2d834677ec46f6c6bc49637f3d83d29d6e71cd84049627b5f0f9fde0059fc33a.cubin",
+        "sass": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_fwd_kernel_stage1-2d834677ec46f6c6bc49637f3d83d29d6e71cd84049627b5f0f9fde0059fc33a.sass"
+      }
+    },
+    {
+      "name": "_merge_prefix_suffix",
+      "hash": "9a13e900ced6ab674d0684242fb593fba8a0752d54f9ed0068ddc7b989b4e5f4",
+      "grid": [
+        3,
+        8
+      ],
+      "target": "GPUTarget(backend='cuda', arch=80, warp_size=32)",
+      "registers_per_thread": 27,
+      "spills_reported_by_triton": 0,
+      "shared_memory_bytes": 1024,
+      "num_warps": 4,
+      "num_stages": 3,
+      "ptx_mma_instruction_count": 0,
+      "ptx_fma_instruction_count": 14,
+      "files": {
+        "ptx": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_merge_prefix_suffix-9a13e900ced6ab674d0684242fb593fba8a0752d54f9ed0068ddc7b989b4e5f4.ptx",
+        "ttgir": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_merge_prefix_suffix-9a13e900ced6ab674d0684242fb593fba8a0752d54f9ed0068ddc7b989b4e5f4.ttgir",
+        "cubin": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_merge_prefix_suffix-9a13e900ced6ab674d0684242fb593fba8a0752d54f9ed0068ddc7b989b4e5f4.cubin",
+        "sass": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_045514/diagnostic_kernels/_merge_prefix_suffix-9a13e900ced6ab674d0684242fb593fba8a0752d54f9ed0068ddc7b989b4e5f4.sass"
+      }
+    }
+  ],
+  "source_changes": false,
+  "tolerance_changes": false
+}

@@ -1,0 +1,11 @@
+{
+  "status": "diagnostic_only_original_smoke_still_failed",
+  "original_error": "Tensor-likes are not close!\n\nMismatched elements: 4 / 24 (16.7%)\nGreatest absolute difference: 0.0009704748198977597 at index (1, 4) (up to 0.0001 allowed)\nGreatest relative difference: 0.00034664241475592874 at index (1, 4) (up to 0.0001 allowed)",
+  "original_fp16_lse_max_abs_error": 0.0009704748198977597,
+  "fp32_qk_lse_max_abs_error": 2.5732593655902747e-07,
+  "fp32_probe_matches_original_lse_tolerance": true,
+  "change": "cast Q and K to FP32 only for one isolated gather stage call",
+  "source_changes": false,
+  "tolerance_changes": false,
+  "not_a_benchmark_or_proposed_production_fix": true
+}

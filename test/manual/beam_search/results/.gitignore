@@ -1,0 +1,8 @@
+# Keep generated kernel dumps local.
+*.cubin
+*.ptx
+*.sass
+*.ttgir
+
+# Preserve A30 validation logs despite the repository-wide *.log rule.
+!/a30_*/**/*.log

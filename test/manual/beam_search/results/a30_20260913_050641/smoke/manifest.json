@@ -1,0 +1,61 @@
+{
+  "kind": "matrix_run",
+  "complete": false,
+  "cases": [
+    {
+      "name": "single",
+      "command": [
+        "/usr/bin/python",
+        "-B",
+        "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/test_beam_kv_attention.py",
+        "a30-case",
+        "--graph-batch",
+        "64",
+        "--warmup",
+        "10",
+        "--repeats",
+        "30",
+        "--output",
+        "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/single.json",
+        "--beams",
+        "1",
+        "--output-tokens",
+        "3",
+        "--dump-dir",
+        "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/kernels/single"
+      ],
+      "output": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/single.json",
+      "returncode": 0,
+      "log": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/single.log",
+      "status": "completed"
+    },
+    {
+      "name": "mha_tail",
+      "command": [
+        "/usr/bin/python",
+        "-B",
+        "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/test_beam_kv_attention.py",
+        "a30-case",
+        "--graph-batch",
+        "64",
+        "--warmup",
+        "10",
+        "--repeats",
+        "30",
+        "--output",
+        "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/mha_tail.json",
+        "--beams",
+        "3",
+        "--output-tokens",
+        "16",
+        "--pattern",
+        "grouped",
+        "--dump-dir",
+        "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/kernels/mha_tail"
+      ],
+      "output": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/mha_tail.json",
+      "returncode": 1,
+      "log": "/mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/mha_tail.log"
+    }
+  ]
+}

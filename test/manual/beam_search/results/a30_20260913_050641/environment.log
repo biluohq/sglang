@@ -1,0 +1,9 @@
+Python: 3.11.2 (main, Apr 28 2025, 14:11:48) [GCC 12.2.0]
+Executable: /usr/bin/python
+PyTorch: 2.7.1 CUDA runtime: 12.6
+Triton: 3.3.1
+GPU: NVIDIA A30
+Capability: (8, 0)
+Properties: _CudaDeviceProperties(name='NVIDIA A30', major=8, minor=0, total_memory=24062MB, multi_processor_count=56, uuid=b5b41f6c-4b58-802d-6c97-161aa60ad923, L2_cache_size=24MB)
+Free/total bytes: (24986714112, 25231032320)
+FP16 PyTorch smoke: OK

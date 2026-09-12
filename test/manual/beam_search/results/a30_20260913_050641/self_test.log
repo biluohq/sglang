@@ -1,0 +1,43 @@
+test_empty_history (__main__.TestBeamKVCPU.test_empty_history) ... ok
+test_growth_does_not_change_layout (__main__.TestBeamKVCPU.test_growth_does_not_change_layout) ... ok
+test_invalid_parameters (__main__.TestBeamKVCPU.test_invalid_parameters) ... ok
+test_live_bounds_and_allocator_accounting (__main__.TestBeamKVCPU.test_live_bounds_and_allocator_accounting) ... ok
+test_mask_matches_path (__main__.TestBeamKVCPU.test_mask_matches_path) ... ok
+test_masked_nan_and_extreme_scores (__main__.TestBeamKVCPU.test_masked_nan_and_extreme_scores) ... ok
+test_random_concentration_one_coalesces (__main__.TestBeamKVCPU.test_random_concentration_one_coalesces) ... ok
+test_recycled_slots_do_not_alias_live_nodes (__main__.TestBeamKVCPU.test_recycled_slots_do_not_alias_live_nodes) ... ok
+test_relayout_preserves_holes_and_padding (__main__.TestBeamKVCPU.test_relayout_preserves_holes_and_padding) ... ok
+test_scan_and_gather_equivalence (__main__.TestBeamKVCPU.test_scan_and_gather_equivalence) ... ok
+test_seed_reproducibility (__main__.TestBeamKVCPU.test_seed_reproducibility) ... ok
+test_slot_permutation_invariance (__main__.TestBeamKVCPU.test_slot_permutation_invariance) ... ok
+test_split_softmax_merge (__main__.TestBeamKVCPU.test_split_softmax_merge) ... ok
+test_traffic_counts_and_partial_groups (__main__.TestBeamKVCPU.test_traffic_counts_and_partial_groups) ... ok
+test_eager_does_not_capture (__main__.TestBenchmarkHarness.test_eager_does_not_capture) ... ok
+test_inspection_restores_jit_method (__main__.TestBenchmarkHarness.test_inspection_restores_jit_method) ... ok
+test_invalid_timing_parameters (__main__.TestBenchmarkHarness.test_invalid_timing_parameters) ... ok
+test_isolated_matrix_selects_existing_python (__main__.TestBenchmarkHarness.test_isolated_matrix_selects_existing_python) ... ok
+test_matrix_is_staged_and_supports_selection (__main__.TestBenchmarkHarness.test_matrix_is_staged_and_supports_selection) ... ok
+test_padded_geometry_counts_real_blocks (__main__.TestBenchmarkHarness.test_padded_geometry_counts_real_blocks) ... ok
+test_query_cap_deduplicates_large_beam_groups (__main__.TestBenchmarkHarness.test_query_cap_deduplicates_large_beam_groups) ... ok
+test_query_tiles_cover_each_beam_head_once (__main__.TestBenchmarkHarness.test_query_tiles_cover_each_beam_head_once) ... ok
+test_scrub_is_outside_single_call_graph (__main__.TestBenchmarkHarness.test_scrub_is_outside_single_call_graph) ... ok
+test_source_subset_does_not_import_runtime_or_modify_function_bodies (__main__.TestBenchmarkHarness.test_source_subset_does_not_import_runtime_or_modify_function_bodies) ... ok
+test_split_partition_and_merge_match_full_attention (__main__.TestBenchmarkHarness.test_split_partition_and_merge_match_full_attention) ... ok
+test_standalone_loader_launches_existing_cuda_baseline_without_runtime (__main__.TestBenchmarkHarness.test_standalone_loader_launches_existing_cuda_baseline_without_runtime) ... ok
+test_summary_uses_best_split_in_same_execution (__main__.TestBenchmarkHarness.test_summary_uses_best_split_in_same_execution) ... ok
+test_warm_graph_averages_replay_batch (__main__.TestBenchmarkHarness.test_warm_graph_averages_replay_batch) ... ok
+test_budget_skip_occurs_before_gpu_data_allocations (__main__.TestA30Grouping.test_budget_skip_occurs_before_gpu_data_allocations) ... ok
+test_large_case_has_no_dense_mask (__main__.TestA30Grouping.test_large_case_has_no_dense_mask) ... ok
+test_original_matrix_is_preserved (__main__.TestA30Grouping.test_original_matrix_is_preserved) ... ok
+test_parent_trace_input_validation (__main__.TestA30Grouping.test_parent_trace_input_validation) ... ok
+test_policy_validation_and_fixed_matrix_policy (__main__.TestA30Grouping.test_policy_validation_and_fixed_matrix_policy) ... ok
+test_prompt_and_suffix_indices_do_not_duplicate_shared_nodes (__main__.TestA30Grouping.test_prompt_and_suffix_indices_do_not_duplicate_shared_nodes) ... ok
+test_raw_trace_snapshot_matches_forward_reparent (__main__.TestA30Grouping.test_raw_trace_snapshot_matches_forward_reparent) ... ok
+test_selection_thresholds_and_zero_prefix (__main__.TestA30Grouping.test_selection_thresholds_and_zero_prefix) ... ok
+test_split_attention_uses_only_path_nodes (__main__.TestA30Grouping.test_split_attention_uses_only_path_nodes) ... ok
+test_tree_order_prefix_matches_all_members (__main__.TestA30Grouping.test_tree_order_prefix_matches_all_members) ... ok
+
+----------------------------------------------------------------------
+Ran 38 tests in 0.123s
+
+OK
