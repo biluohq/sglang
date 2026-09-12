@@ -18,7 +18,9 @@ import re
 import statistics
 import subprocess
 import sys
+import time
 import unittest
+from array import array
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -794,6 +796,62 @@ class TestBenchmarkHarness(unittest.TestCase):
                     if splits > 1:
                         self.assertEqual(launches[1][0], "_merge_beam_splits")
                         self.assertEqual(launches[1][1], (18, 8))
+                launches.clear()
+                grouped_prefix = TensorShape((2, 18, 8, 128), "float32")
+                grouped_lse = TensorShape((2, 18, 8), "float32")
+                paths = TensorShape((18, 96), "int32")
+                order = TensorShape((18,), "int64")
+                shared.shared_prefix_attention(
+                    q,
+                    kv,
+                    kv,
+                    paths,
+                    order,
+                    None,
+                    None,
+                    grouped_prefix,
+                    grouped_lse,
+                    beams=9,
+                    group_beams=3,
+                    tile=32,
+                    splits=2,
+                    prompt_len=64,
+                )
+                self.assertEqual(launches[0][1], (6, 2, 2))
+                self.assertEqual(launches[0][2]["PROMPT_LEN"], 64)
+                self.assertEqual(launches[0][2]["BLOCK_M"], 16)
+                shared.merge_prefix_suffix(
+                    grouped_prefix,
+                    grouped_lse,
+                    TensorShape((18, 8, 4, 128), "float32"),
+                    TensorShape((18, 8, 4), "float32"),
+                    None,
+                    None,
+                    q,
+                    TensorShape((18, 8), "float32"),
+                )
+                self.assertEqual(launches[1][0], "_merge_prefix_suffix")
+                self.assertEqual(launches[1][2]["BLOCK_SPLITS"], 4)
+                torch.sub, torch.cumsum = Mock(), Mock()
+                shared.group_prefix_metadata(
+                    paths,
+                    order,
+                    None,
+                    None,
+                    None,
+                    None,
+                    MagicMock(),
+                    None,
+                    None,
+                    beams=9,
+                    group_beams=3,
+                    prompt_len=64,
+                )
+                self.assertEqual(launches[2][0], "_group_prefix_metadata")
+                self.assertEqual(launches[2][2]["BLOCK_B"], 4)
+                self.assertEqual(launches[3][0], "_suffix_indices")
+                torch.sub.assert_called_once()
+                torch.cumsum.assert_called_once()
                 self.assertEqual(
                     {name for name in sys.modules if name.startswith("sglang")},
                     runtime_before,
@@ -1501,7 +1559,11 @@ def gpu_environment(torch):
     props = torch.cuda.get_device_properties(torch.cuda.current_device())
     try:
         driver = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"],
+            [
+                "nvidia-smi",
+                "--query-gpu=name,driver_version,mig.mode.current",
+                "--format=csv,noheader",
+            ],
             capture_output=True,
             text=True,
             timeout=10,
@@ -1760,6 +1822,10 @@ def run_gpu(args):
 
 
 def matrix_cases(preset):
+    if preset.startswith("a30-"):
+        return [
+            (name, "a30-case", parameters) for name, parameters in a30_cases(preset)
+        ]
     if preset == "v100-tune":
         common = {
             "standalone": True,
@@ -1981,6 +2047,18 @@ def matrix_commands(args):
             "dump_dir": str(root / "kernels" / name),
             **overrides,
         }
+        if mode == "a30-case":
+            parameters = {
+                "graph_batch": args.graph_batch,
+                "warmup": args.warmup,
+                "repeats": args.repeats,
+                "output": str(root / f"{name}.json"),
+                **overrides,
+            }
+            if args.preset in ("a30-smoke", "a30-calibrate"):
+                parameters["dump_dir"] = str(root / "kernels" / name)
+            if args.policy:
+                parameters["policy"] = args.policy
         command = [
             args.python or sys.executable,
             "-B",
@@ -2026,11 +2104,18 @@ def run_matrix(args):
                 item["command"], stdout=stream, stderr=subprocess.STDOUT
             )
         record = {**item, "returncode": process.returncode, "log": str(log)}
+        if process.returncode == 0:
+            result = json.loads(Path(item["output"]).read_text())
+            record["status"] = result.get("status", "completed")
         manifest["cases"].append(record)
         (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         if process.returncode:
             raise RuntimeError(f"matrix stopped at {item['name']}; inspect {log}")
     manifest["complete"] = True
+    manifest["resource_skipped"] = sum(
+        c.get("status") == "resource_skipped" for c in manifest["cases"]
+    )
+    manifest["all_cases_validated"] = manifest["resource_skipped"] == 0
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
 
@@ -2143,6 +2228,1266 @@ def snapshot_from_args(args, seed=None):
     )
 
 
+A30_MAIN_WIDTHS = (1, 2, 3, 6, 8, 12, 16, 24, 32, 64, 128)
+A30_STRESS_WIDTHS = (256, 512, 1024, 2048, 4096)
+A30_OUTPUTS = (3, 16, 32, 64, 128)
+
+
+def parent_trace(beams, steps, pattern, seed):
+    rng = random.Random(seed)
+    trace = []
+    for step in range(steps):
+        if step == 0 or pattern == "independent":
+            parents = range(beams)
+        elif pattern == "shared":
+            parents = [rng.randrange(beams)] * beams
+        elif pattern == "grouped":
+            width = max(2, math.ceil(beams / 4))
+            parents = [min(i // width * width, beams - 1) for i in range(beams)]
+        else:
+            favored = rng.randrange(beams)
+            parents = [
+                favored if rng.random() < 0.5 else rng.randrange(beams)
+                for _ in range(beams)
+            ]
+        trace.append(array("i", parents))
+    return trace
+
+
+def trace_snapshot(trace, beams, depth, compact=True):
+    rank = list(range(beams))
+    for parents in trace[:depth]:
+        order = sorted(range(beams), key=lambda row: rank[parents[row]])
+        rank = [0] * beams
+        for i, row in enumerate(order):
+            rank[row] = i
+    paths = array("i", [0]) * (beams * depth)
+    for row in range(beams):
+        ancestor = row
+        for position in range(depth - 1, -1, -1):
+            paths[row * depth + position] = position * beams + ancestor
+            ancestor = trace[position][ancestor]
+    nodes = sorted(set(paths))
+    if compact:
+        locations = {node: slot for slot, node in enumerate(nodes)}
+        slots = array("i", (locations[node] for node in paths))
+    else:
+        slots = paths
+    order = sorted(range(beams), key=rank.__getitem__)
+    return slots, array("i", order), len(nodes)
+
+
+def group_prefix_oracle(
+    paths, order, beams, depth, group_beams, min_prefix=0, min_saved=0
+):
+    prefixes = []
+    for start in range(0, beams, group_beams):
+        members = order[start : start + group_beams]
+        first, last = members[0], members[-1]
+        common = 0
+        while (
+            common < depth
+            and paths[first * depth + common] == paths[last * depth + common]
+        ):
+            common += 1
+        if (
+            len(members) < 2
+            or common < min_prefix
+            or (len(members) - 1) * common < min_saved
+        ):
+            common = 0
+        prefixes.append(common)
+    return prefixes
+
+
+def a30_memory_estimate(
+    beams,
+    depth,
+    requests,
+    q_heads,
+    kv_heads,
+    dim,
+    layers,
+    query_tile,
+    splits,
+    reference_rows,
+    prompt_len=0,
+):
+    rows = beams * requests
+    slots = rows * depth + requests * prompt_len
+    width = max(1, depth + prompt_len)
+    groups = requests * math.ceil(beams / max(1, query_tile // (q_heads // kv_heads)))
+    kv = 2 * slots * kv_heads * dim * 2 * layers
+    paths = rows * width * 4
+    metadata = paths * 5 + rows * 128 + groups * 4
+    query_output = rows * q_heads * (dim * 2 * 2 + 4) * layers
+    partial = rows * q_heads * (dim + 1) * 4 * splits * 2
+    reference = (
+        min(rows, reference_rows) * q_heads * width * (dim * 24 + 32)
+        + rows * q_heads * (dim + 1) * 8 * 4
+    )
+    return {
+        "kv_upper_bound_bytes": kv,
+        "metadata_bytes": metadata,
+        "query_output_bytes": query_output,
+        "partial_workspace_bytes": partial,
+        "reference_chunk_bytes": reference,
+        "estimated_peak_bytes": math.ceil(
+            1.25 * (kv + metadata + query_output + partial + reference)
+        )
+        + (256 << 20),
+        "dense_ancestry_mask_bytes": 0,
+    }
+
+
+def a30_cases(preset):
+    if preset in ("a30-main", "a30-stress"):
+        widths = A30_MAIN_WIDTHS if preset == "a30-main" else A30_STRESS_WIDTHS
+        return [
+            (
+                f"k{k}_n{n}_{pattern}_{heads}",
+                {"beams": k, "output_tokens": n, "pattern": pattern, "kv_heads": kv},
+            )
+            for k, n, pattern, (heads, kv) in itertools.product(
+                widths,
+                A30_OUTPUTS,
+                ("shared", "grouped", "independent"),
+                (("mha", 8), ("gqa", 2)),
+            )
+        ]
+    if preset == "a30-smoke":
+        return [
+            ("single", {"beams": 1, "output_tokens": 3}),
+            ("mha_tail", {"beams": 3, "output_tokens": 16, "pattern": "grouped"}),
+            ("gqa_tail", {"beams": 6, "output_tokens": 32, "kv_heads": 2}),
+            (
+                "independent",
+                {"beams": 12, "output_tokens": 3, "pattern": "independent"},
+            ),
+        ]
+    if preset == "a30-calibrate":
+        return [
+            (
+                f"resources_w{warps}_p{stages}",
+                {
+                    "beams": 32,
+                    "output_tokens": 64,
+                    "query_tile": 32,
+                    "tile": 64,
+                    "warps": warps,
+                    "stages": stages,
+                },
+            )
+            for warps, stages in ((4, 1), (4, 3), (8, 2))
+        ] + [
+            (
+                f"k{k}_q{q}_t{tile}_s{split}_{heads}",
+                {
+                    "beams": k,
+                    "output_tokens": 64,
+                    "query_tile": q,
+                    "tile": tile,
+                    "prefix_splits": split,
+                    "kv_heads": kv,
+                },
+            )
+            for k, (heads, kv), (q, tile, split) in itertools.product(
+                (8, 32, 128),
+                (("mha", 8), ("gqa", 2)),
+                (
+                    (16, 32, 1),
+                    (16, 64, 2),
+                    (32, 32, 2),
+                    (32, 64, 4),
+                    (32, 128, 1),
+                    (16, 32, 8),
+                ),
+            )
+        ]
+    if preset == "a30-trace":
+        return [
+            (
+                "random_seed47",
+                {
+                    "beams": 24,
+                    "output_tokens": 32,
+                    "pattern": "random",
+                    "seed": 47,
+                    "trace": True,
+                },
+            ),
+            (
+                "random_seed71",
+                {
+                    "beams": 24,
+                    "output_tokens": 32,
+                    "pattern": "random",
+                    "seed": 71,
+                    "trace": True,
+                },
+            ),
+            ("trace_shared", {"beams": 24, "output_tokens": 32, "trace": True}),
+            (
+                "trace_grouped",
+                {"beams": 24, "output_tokens": 32, "pattern": "grouped", "trace": True},
+            ),
+            ("layers8", {"beams": 32, "output_tokens": 64, "layers": 8}),
+            (
+                "layers32",
+                {"beams": 32, "output_tokens": 64, "layers": 32, "kv_heads": 2},
+            ),
+            ("requests4", {"beams": 24, "output_tokens": 64, "requests": 4}),
+            ("bf16", {"beams": 32, "output_tokens": 64, "dtype": "bfloat16"}),
+            ("head64", {"beams": 12, "output_tokens": 64, "head_dim": 64}),
+            ("prompt512", {"beams": 12, "output_tokens": 32, "prompt_len": 512}),
+            ("prompt2048", {"beams": 12, "output_tokens": 32, "prompt_len": 2048}),
+            ("prompt8192", {"beams": 12, "output_tokens": 32, "prompt_len": 8192}),
+            (
+                "cache_pressure",
+                {"beams": 32, "output_tokens": 64, "cache_mode": "scrub"},
+            ),
+        ]
+    raise ValueError(f"unknown A30 preset: {preset}")
+
+
+def a30_reference(torch, q, k, v, paths, length, out, lse, chunk_rows):
+    head_map = torch.arange(q.shape[1], device=q.device) // (q.shape[1] // k.shape[1])
+    for start in range(0, q.shape[0], chunk_rows):
+        end = min(start + chunk_rows, q.shape[0])
+        slots = paths[start:end, :length].long()
+        keys = k[slots][:, :, head_map, :].double()
+        values = v[slots][:, :, head_map, :].double()
+        scores = torch.einsum("bhd,bthd->bht", q[start:end].double(), keys) / math.sqrt(
+            q.shape[2]
+        )
+        out[start:end] = torch.einsum("bht,bthd->bhd", scores.softmax(-1), values)
+        lse[start:end] = torch.logsumexp(scores, -1)
+
+
+def parse_parent_trace(raw, requests, depth, beams):
+    data = raw.get("parents") if isinstance(raw, dict) else None
+    if not isinstance(data, list) or len(data) != requests:
+        raise ValueError("trace JSON must contain parents[request][step][beam]")
+    for request in data:
+        if not isinstance(request, list) or len(request) != depth:
+            raise ValueError("trace step count does not match output_tokens")
+        for step in request:
+            if (
+                not isinstance(step, list)
+                or len(step) != beams
+                or any(
+                    type(parent) is not int or not 0 <= parent < beams
+                    for parent in step
+                )
+            ):
+                raise ValueError(
+                    "trace shape or parent indices do not match the experiment"
+                )
+    return [[array("i", step) for step in request] for request in data]
+
+
+def a30_candidate_policy(args):
+    policy = {
+        "schema": "beam-prefix-policy-v1",
+        "min_prefix": args.min_prefix,
+        "min_saved": args.min_saved,
+    }
+    if args.policy:
+        policy = json.loads(Path(args.policy).read_text())
+    if not isinstance(policy, dict) or policy.get("schema") != "beam-prefix-policy-v1":
+        raise ValueError("unknown policy schema")
+    choices = {
+        "query_tile": (16, 32, 64),
+        "tile": (32, 64, 128),
+        "prefix_splits": (1, 2, 4, 8),
+        "suffix_splits": (1, 2, 4, 8),
+        "warps": (4, 8),
+        "stages": (1, 2, 3),
+    }
+    if set(policy) - {"schema", "min_prefix", "min_saved", *choices}:
+        raise ValueError("unknown policy field")
+    for name in ("min_prefix", "min_saved"):
+        if type(policy.get(name)) is not int or policy[name] < 0:
+            raise ValueError("policy thresholds must be nonnegative integers")
+    for name, allowed in choices.items():
+        if name in policy and (
+            type(policy[name]) is not int or policy[name] not in allowed
+        ):
+            raise ValueError(f"invalid policy {name}")
+    return policy
+
+
+def run_a30(args):
+    policy = a30_candidate_policy(args)
+    args = argparse.Namespace(**vars(args))
+    for key in ("query_tile", "tile", "prefix_splits", "warps", "stages"):
+        if key in policy:
+            setattr(args, key, policy[key])
+    if args.parent_trace and not args.trace:
+        raise ValueError("--parent-trace requires --trace")
+    positive = (
+        args.beams,
+        args.requests,
+        args.output_tokens,
+        args.q_heads,
+        args.kv_heads,
+        args.layers,
+        args.reference_rows,
+        args.repeats,
+        args.warmup,
+    )
+    if min(positive) < 1 or args.output_tokens < 2 or args.prompt_len < 0:
+        raise ValueError("positive sizes and at least two output tokens are required")
+    if args.q_heads % args.kv_heads or args.query_tile < args.q_heads // args.kv_heads:
+        raise ValueError("query tile must accommodate an integral GQA head group")
+    if "gather" not in args.modes or len(set(args.modes)) != len(args.modes):
+        raise ValueError("modes must be unique and include the gather baseline")
+    if args.graph_batch < 1 or args.eviction_mib < 1:
+        raise ValueError("graph_batch and eviction_mib must be positive")
+    if not 0 < args.memory_fraction <= 0.8 or args.memory_gib <= 0:
+        raise ValueError("memory fraction must be in (0, 0.8] and memory GiB positive")
+    torch, triton, shared, gather = load_cuda(True)
+    if torch.cuda.get_device_capability()[0] < 8:
+        raise ValueError(
+            "A30 experiments require SM80 or newer; use the V100 presets on SM70"
+        )
+    min_prefix, min_saved = policy["min_prefix"], policy["min_saved"]
+    depth = args.output_tokens - 1
+    width = depth + args.prompt_len
+    rows = args.beams * args.requests
+    group_beams = max(
+        1, min(args.beams, args.query_tile // (args.q_heads // args.kv_heads))
+    )
+    groups = args.requests * math.ceil(args.beams / group_beams)
+    free, _ = torch.cuda.mem_get_info()
+    budget = min(int(args.memory_gib * (1 << 30)), int(free * args.memory_fraction))
+    estimate = a30_memory_estimate(
+        args.beams,
+        depth,
+        args.requests,
+        args.q_heads,
+        args.kv_heads,
+        args.head_dim,
+        args.layers,
+        args.query_tile,
+        max(args.prefix_splits, policy.get("suffix_splits", 1), *args.splits),
+        args.reference_rows,
+        args.prompt_len,
+    )
+    if args.cache_mode == "scrub":
+        estimate["estimated_peak_bytes"] += args.eviction_mib * (1 << 20)
+    allocated_at_start = torch.cuda.memory_allocated()
+    torch.cuda.reset_peak_memory_stats()
+    header = {
+        "kind": "a30_grouped_prefix",
+        "parameters": vars(args),
+        "torch": torch.__version__,
+        "triton": triton.__version__,
+        "gpu": torch.cuda.get_device_name(),
+        "environment": gpu_environment(torch),
+        "memory_budget_bytes": budget,
+        "memory_estimate": estimate,
+        "policy_status": "loaded_candidate"
+        if args.policy
+        else "uncalibrated_candidate",
+        "policy": policy,
+        "scope": "attention only; no model, top-k, VMM, or serving integration",
+        "trace_timing": (
+            "sum of per-step replay medians with fixed prior-step snapshots; "
+            "parent uploads and prior-path snapshots excluded from GPU intervals"
+        ),
+        "selection_note": (
+            "thresholds are frozen before the run; comparisons report the best "
+            "measured suffix split for diagnosis, not an online performance oracle"
+        ),
+        "prompt_semantics": (
+            "prompt remains on the per-beam gather path; "
+            "only beam-KV prefix sharing is changed"
+        ),
+        "reference_semantics": (
+            "synthetic Q/K/V with parent-selection paths; not generated model tokens"
+        ),
+        "storage_semantics": (
+            "snapshot cases place retained nodes compactly before timing; trace "
+            "cases use append-only step slots; no online KV compaction is timed"
+        ),
+    }
+    if estimate["estimated_peak_bytes"] > budget:
+        return header | {
+            "status": "resource_skipped",
+            "reason": "estimated peak exceeds explicit budget",
+        }
+    build_start = time.perf_counter()
+    traces = (
+        parse_parent_trace(
+            json.loads(Path(args.parent_trace).read_text()),
+            args.requests,
+            depth,
+            args.beams,
+        )
+        if args.parent_trace
+        else [
+            parent_trace(args.beams, depth, args.pattern, args.seed + r)
+            for r in range(args.requests)
+        ]
+    )
+    snapshots = [
+        trace_snapshot(trace, args.beams, depth, compact=not args.trace)
+        for trace in traces
+    ]
+    spans = [args.beams * depth if args.trace else size for _, _, size in snapshots]
+    bases, cursor = [], 0
+    flat_paths, order_cpu = array("i"), array("i")
+    for request, (slots, order, _) in enumerate(snapshots):
+        bases.append(cursor)
+        for row in range(args.beams):
+            flat_paths.extend(range(cursor, cursor + args.prompt_len))
+            flat_paths.extend(
+                cursor + args.prompt_len + slot
+                for slot in slots[row * depth : (row + 1) * depth]
+            )
+        order_cpu.extend(request * args.beams + row for row in order)
+        cursor += args.prompt_len + spans[request]
+    cpu_build_ms = (time.perf_counter() - build_start) * 1000
+    paths = torch.tensor(flat_paths, dtype=torch.int32, device="cuda").reshape(
+        rows, width
+    )
+    original_paths = paths.clone()
+    previous = paths.clone()
+    parents = torch.empty(rows, dtype=torch.int64, device="cuda")
+    new_slots = torch.empty(rows, dtype=torch.int32, device="cuda")
+    ranks = torch.arange(args.beams, device="cuda", dtype=torch.int64).repeat(
+        args.requests, 1
+    )
+    initial_ranks = ranks.clone()
+    tree_order = torch.tensor(order_cpu, dtype=torch.int64, device="cuda")
+    offsets = (
+        torch.arange(args.requests, device="cuda", dtype=torch.int64)[:, None]
+        * args.beams
+    )
+    rank_values = torch.arange(args.beams, device="cuda", dtype=torch.int64).expand(
+        args.requests, -1
+    )
+    last_parents = torch.tensor(
+        [p for trace in traces for p in trace[-1]], dtype=torch.int64, device="cuda"
+    )
+    # Recover the preceding tree ranks for a genuine last-step metadata replay.
+    for request, trace in enumerate(traces):
+        _, prior_order, _ = trace_snapshot(trace, args.beams, depth - 1)
+        ranks[request, torch.tensor(prior_order, dtype=torch.int64, device="cuda")] = (
+            torch.arange(args.beams, device="cuda")
+        )
+    initial_ranks.copy_(ranks)
+    sequence = torch.full((rows,), width, dtype=torch.int32, device="cuda")
+    prefix = torch.empty(groups, dtype=torch.int32, device="cuda")
+    row_prefix = torch.empty(rows, dtype=torch.int32, device="cuda")
+    row_group = torch.empty(rows, dtype=torch.int32, device="cuda")
+    lengths = torch.empty(rows, dtype=torch.int32, device="cuda")
+    indptr = torch.empty(rows + 1, dtype=torch.int32, device="cuda")
+    suffix_indices = torch.empty(rows * width, dtype=torch.int32, device="cuda")
+    baseline_indices = torch.empty_like(suffix_indices)
+    baseline_indptr = torch.arange(rows + 1, dtype=torch.int32, device="cuda") * width
+    active = torch.ones(rows, dtype=torch.bool, device="cuda")
+    generator = torch.Generator(device="cuda").manual_seed(args.seed)
+    dtype = getattr(torch, args.dtype)
+    saved_initial_ranks = initial_ranks.clone()
+    saved_last_parents = last_parents.clone()
+    layer_data = []
+    for _ in range(args.layers):
+        q = torch.randn(
+            (rows, args.q_heads, args.head_dim),
+            generator=generator,
+            dtype=dtype,
+            device="cuda",
+        )
+        k = torch.randn(
+            (cursor, args.kv_heads, args.head_dim),
+            generator=generator,
+            dtype=dtype,
+            device="cuda",
+        )
+        v = torch.randn(k.shape, generator=generator, dtype=dtype, device="cuda")
+        layer_data.append(
+            (
+                q,
+                k,
+                v,
+                torch.empty_like(q),
+                torch.empty(q.shape[:2], dtype=torch.float32, device="cuda"),
+            )
+        )
+    pref_out = torch.empty(
+        (args.prefix_splits, rows, args.q_heads, args.head_dim),
+        dtype=torch.float32,
+        device="cuda",
+    )
+    pref_lse = torch.empty(pref_out.shape[:-1], dtype=torch.float32, device="cuda")
+    max_splits = max(policy.get("suffix_splits", 1), *args.splits)
+    suffix_workspace = torch.empty(
+        (rows * args.q_heads * max_splits * args.head_dim,),
+        dtype=torch.float32,
+        device="cuda",
+    )
+    suffix_lse_workspace = torch.empty(
+        (rows * args.q_heads * max_splits,), dtype=torch.float32, device="cuda"
+    )
+    split_tensor = torch.empty(rows, dtype=torch.int32, device="cuda")
+    dump_dir = Path(args.dump_dir) if args.dump_dir else None
+    if dump_dir:
+        dump_dir.mkdir(parents=True, exist_ok=True)
+
+    def order_update(source_ranks, parent_indices):
+        parent_ranks = torch.gather(
+            source_ranks, 1, parent_indices.reshape(args.requests, args.beams)
+        )
+        result = torch.argsort(parent_ranks, dim=1, stable=True)
+        tree_order.copy_((result + offsets).flatten())
+        return result
+
+    def metadata(mode):
+        if mode == "gather" or args.beams == 1:
+            if not args.trace:
+                baseline_indices.copy_(paths.flatten())
+            else:
+                row_prefix.zero_()
+                baseline_indptr[0].zero_()
+                torch.cumsum(
+                    sequence, 0, dtype=baseline_indptr.dtype, out=baseline_indptr[1:]
+                )
+                shared._suffix_indices[(rows,)](
+                    paths,
+                    row_prefix,
+                    baseline_indptr,
+                    baseline_indices,
+                    PATH_WIDTH=width,
+                    BLOCK_T=triton.next_power_of_2(width),
+                    PROMPT_LEN=args.prompt_len,
+                )
+            return
+        result_order = order_update(initial_ranks, last_parents)
+        ranks.scatter_(1, result_order, rank_values)
+        shared.group_prefix_metadata(
+            paths,
+            tree_order,
+            sequence,
+            prefix,
+            row_prefix,
+            row_group,
+            indptr,
+            suffix_indices,
+            lengths,
+            beams=args.beams,
+            group_beams=group_beams,
+            min_prefix=min_prefix if mode == "auto" else 0,
+            min_saved=min_saved if mode == "auto" else 0,
+            prompt_len=args.prompt_len,
+        )
+
+    def execute(mode, split, data):
+        q, k, v, out, lse = data
+        part = suffix_workspace[: rows * args.q_heads * split * args.head_dim].view(
+            rows, args.q_heads, split, args.head_dim
+        )
+        part_lse = suffix_lse_workspace[: rows * args.q_heads * split].view(
+            rows, args.q_heads, split
+        )
+        if mode == "gather" or args.beams == 1:
+            gather.decode_attention_fwd(
+                q,
+                k,
+                v,
+                out,
+                baseline_indptr,
+                baseline_indices,
+                part,
+                part_lse,
+                split_tensor,
+                split,
+                1 / math.sqrt(args.head_dim),
+                1.0,
+                1.0,
+                enable_lean=False,
+            )
+            return
+        shared.shared_prefix_attention(
+            q,
+            k,
+            v,
+            paths,
+            tree_order,
+            prefix,
+            active,
+            pref_out,
+            pref_lse,
+            beams=args.beams,
+            group_beams=group_beams,
+            tile=args.tile,
+            splits=args.prefix_splits,
+            prompt_len=args.prompt_len,
+            num_warps=args.warps,
+            num_stages=args.stages,
+        )
+        stage = (
+            gather._decode_att_m_fwd
+            if args.q_heads == args.kv_heads
+            else gather._decode_grouped_att_m_fwd
+        )
+        stage(
+            q,
+            k,
+            v,
+            part,
+            part_lse,
+            indptr,
+            suffix_indices,
+            split_tensor,
+            split,
+            1 / math.sqrt(args.head_dim),
+            0.0,
+        )
+        shared.merge_prefix_suffix(
+            pref_out, pref_lse, part, part_lse, indptr, active, out, lse
+        )
+
+    scrub = (
+        torch.zeros(args.eviction_mib * (1 << 20), dtype=torch.uint8, device="cuda")
+        if args.cache_mode == "scrub"
+        else None
+    )
+    modes = ("gather",) if args.beams == 1 else tuple(args.modes)
+    tests, timings, diagnostics, group_reports = [], [], [], []
+    ref_out = torch.empty_like(layer_data[0][0], dtype=torch.float64)
+    ref_lse = torch.empty(
+        layer_data[0][0].shape[:2], dtype=torch.float64, device="cuda"
+    )
+    tolerance = 0.01 if dtype == torch.bfloat16 else 0.002
+    for mode in modes:
+        metadata(mode)
+        if mode != "gather":
+            expected = []
+            for slots, order, _ in snapshots:
+                expected.extend(
+                    group_prefix_oracle(
+                        slots,
+                        order,
+                        args.beams,
+                        depth,
+                        group_beams,
+                        min_prefix if mode == "auto" else 0,
+                        min_saved if mode == "auto" else 0,
+                    )
+                )
+            torch.testing.assert_close(
+                prefix.cpu(), torch.tensor(expected, dtype=torch.int32), rtol=0, atol=0
+            )
+            selected_prefixes = prefix.cpu().tolist()
+            sizes = [
+                min(group_beams, args.beams - start)
+                for _ in range(args.requests)
+                for start in range(0, args.beams, group_beams)
+            ]
+            group_reports.append(
+                {
+                    "mode": mode,
+                    "prefix_lengths": selected_prefixes,
+                    "selected_groups": sum(c > 0 for c in selected_prefixes),
+                    "logical_beam_kv_references": sum(
+                        c + size * (depth - c)
+                        for size, c in zip(sizes, selected_prefixes)
+                    ),
+                    "baseline_beam_kv_references": rows * depth,
+                }
+            )
+        mode_splits = (
+            [policy["suffix_splits"]]
+            if mode == "auto" and "suffix_splits" in policy
+            else args.splits
+        )
+        for split in mode_splits:
+            split_tensor.fill_(split)
+            for layer, data in enumerate(layer_data):
+                execute(mode, split, data)
+                a30_reference(
+                    torch,
+                    *data[:3],
+                    paths,
+                    width,
+                    ref_out,
+                    ref_lse,
+                    args.reference_rows,
+                )
+                torch.testing.assert_close(
+                    data[3].double(), ref_out, atol=tolerance, rtol=tolerance
+                )
+                if mode != "gather":
+                    torch.testing.assert_close(
+                        data[4].double(), ref_lse, atol=1e-4, rtol=1e-4
+                    )
+                if mode != "gather" and args.beams <= 12 and args.layers == 1:
+                    active[-1] = False
+                    execute(mode, split, data)
+                    torch.testing.assert_close(
+                        data[3][-1], torch.zeros_like(data[3][-1]), rtol=0, atol=0
+                    )
+                    if not torch.isneginf(data[4][-1]).all().item():
+                        raise AssertionError(
+                            "inactive query must have negative infinite LSE"
+                        )
+                    active.fill_(True)
+                    prefix.fill_(depth)
+                    row_prefix.fill_(depth)
+                    lengths.fill_(args.prompt_len)
+                    indptr.copy_(
+                        torch.arange(rows + 1, device="cuda", dtype=torch.int32)
+                        * args.prompt_len
+                    )
+                    shared._suffix_indices[(rows,)](
+                        paths,
+                        row_prefix,
+                        indptr,
+                        suffix_indices,
+                        PATH_WIDTH=width,
+                        BLOCK_T=triton.next_power_of_2(width),
+                        PROMPT_LEN=args.prompt_len,
+                    )
+                    # Duplicate histories provide a valid fully shared-prefix boundary.
+                    saved_paths = paths.clone()
+                    for start in range(0, rows, args.beams):
+                        for local in range(0, args.beams, group_beams):
+                            members = tree_order[
+                                start + local : start
+                                + min(local + group_beams, args.beams)
+                            ]
+                            paths[members] = paths[members[0]].clone()
+                    execute(mode, split, data)
+                    a30_reference(
+                        torch,
+                        *data[:3],
+                        paths,
+                        width,
+                        ref_out,
+                        ref_lse,
+                        args.reference_rows,
+                    )
+                    torch.testing.assert_close(
+                        data[3].double(), ref_out, atol=tolerance, rtol=tolerance
+                    )
+                    torch.testing.assert_close(
+                        data[4].double(), ref_lse, atol=1e-4, rtol=1e-4
+                    )
+                    paths.copy_(saved_paths)
+                    metadata(mode)
+                    execute(mode, split, data)
+                    a30_reference(
+                        torch,
+                        *data[:3],
+                        paths,
+                        width,
+                        ref_out,
+                        ref_lse,
+                        args.reference_rows,
+                    )
+                tests.append(
+                    {
+                        "mode": mode,
+                        "split": split,
+                        "layer": layer,
+                        "max_abs_error": (data[3].double() - ref_out)
+                        .abs()
+                        .max()
+                        .item(),
+                    }
+                )
+
+            def compute(mode=mode, split=split):
+                for data in layer_data:
+                    execute(mode, split, data)
+
+            def total(mode=mode, compute=compute):
+                metadata(mode)
+                compute()
+
+            functions = (
+                shared._shared_prefix_attention,
+                shared._merge_prefix_suffix,
+                gather._fwd_kernel_stage1,
+                gather._fwd_grouped_kernel_stage1,
+                gather._fwd_kernel_stage2,
+            )
+            diagnostics.append(
+                {
+                    "mode": mode,
+                    "split": split,
+                    "kernels": inspect_compilation(
+                        lambda: execute(mode, split, layer_data[0]), functions, dump_dir
+                    ),
+                }
+            )
+            operations = [
+                ("metadata", lambda mode=mode: metadata(mode)),
+                ("attention_all_layers", compute),
+                ("total", total),
+            ]
+            if args.layers > 1:
+                operations.append(
+                    (
+                        "attention_first_layer",
+                        lambda mode=mode, split=split: execute(
+                            mode, split, layer_data[0]
+                        ),
+                    )
+                )
+            for scope, call in operations:
+                timings.append(
+                    {
+                        "mode": mode,
+                        "split": split,
+                        "scope": scope,
+                        "layers": args.layers,
+                        **measure_cuda(
+                            torch,
+                            call,
+                            args.warmup,
+                            args.repeats,
+                            scrub,
+                            args.execution,
+                            args.graph_batch,
+                        ),
+                    }
+                )
+            if args.trace:
+                paths.zero_()
+                for request, base in enumerate(bases):
+                    paths[
+                        request * args.beams : (request + 1) * args.beams,
+                        : args.prompt_len,
+                    ] = torch.arange(
+                        base, base + args.prompt_len, device="cuda", dtype=torch.int32
+                    )
+                ranks.copy_(torch.arange(args.beams, device="cuda").expand_as(ranks))
+                step_records = []
+                for step in range(depth):
+                    previous.copy_(paths)
+                    parents.copy_(
+                        torch.tensor(
+                            [p for trace in traces for p in trace[step]],
+                            dtype=torch.int64,
+                            device="cuda",
+                        )
+                    )
+                    new_slots.copy_(
+                        torch.tensor(
+                            [
+                                base + args.prompt_len + step * args.beams + row
+                                for base in bases
+                                for row in range(args.beams)
+                            ],
+                            dtype=torch.int32,
+                            device="cuda",
+                        )
+                    )
+                    sequence.fill_(args.prompt_len + step + 1)
+                    baseline_indptr.copy_(
+                        torch.arange(rows + 1, dtype=torch.int32, device="cuda")
+                        * (args.prompt_len + step + 1)
+                    )
+                    initial_ranks.copy_(ranks)
+                    last_parents.copy_(parents)
+
+                    def advance():
+                        shared._reparent_beam_paths[(rows,)](
+                            previous,
+                            parents,
+                            new_slots,
+                            paths,
+                            BEAMS=args.beams,
+                            PATH_WIDTH=width,
+                            LENGTH=args.prompt_len + step + 1,
+                            BLOCK_T=triton.next_power_of_2(width),
+                        )
+                        metadata(mode)
+
+                    advance()
+                    oracle_paths = array("i")
+                    oracle_order = array("i")
+                    for request, (trace, base) in enumerate(zip(traces, bases)):
+                        step_paths, step_order, _ = trace_snapshot(
+                            trace, args.beams, step + 1, compact=False
+                        )
+                        for row in range(args.beams):
+                            oracle_paths.extend(range(base, base + args.prompt_len))
+                            oracle_paths.extend(
+                                base + args.prompt_len + slot
+                                for slot in step_paths[
+                                    row * (step + 1) : (row + 1) * (step + 1)
+                                ]
+                            )
+                        oracle_order.extend(
+                            request * args.beams + row for row in step_order
+                        )
+                    torch.testing.assert_close(
+                        paths[:, : args.prompt_len + step + 1].cpu(),
+                        torch.tensor(oracle_paths, dtype=torch.int32).reshape(rows, -1),
+                        rtol=0,
+                        atol=0,
+                    )
+                    if mode != "gather":
+                        torch.testing.assert_close(
+                            tree_order.cpu(),
+                            torch.tensor(oracle_order, dtype=torch.int64),
+                            rtol=0,
+                            atol=0,
+                        )
+                    for data in layer_data:
+                        execute(mode, split, data)
+                        a30_reference(
+                            torch,
+                            *data[:3],
+                            paths,
+                            args.prompt_len + step + 1,
+                            ref_out,
+                            ref_lse,
+                            args.reference_rows,
+                        )
+                        torch.testing.assert_close(
+                            data[3].double(), ref_out, atol=tolerance, rtol=tolerance
+                        )
+                        if mode != "gather":
+                            torch.testing.assert_close(
+                                data[4].double(), ref_lse, atol=1e-4, rtol=1e-4
+                            )
+
+                    def step_total():
+                        advance()
+                        compute()
+
+                    step_records.append(
+                        {
+                            "kv_len": step + 1,
+                            **measure_cuda(
+                                torch,
+                                step_total,
+                                args.warmup,
+                                args.repeats,
+                                scrub,
+                                args.execution,
+                                args.graph_batch,
+                            ),
+                        }
+                    )
+                timings.append(
+                    {
+                        "mode": mode,
+                        "split": split,
+                        "scope": "trace_sum",
+                        "steps": step_records,
+                        "median_us_sum": sum(s["median_us"] for s in step_records),
+                    }
+                )
+                paths.copy_(original_paths)
+                initial_ranks.copy_(saved_initial_ranks)
+                last_parents.copy_(saved_last_parents)
+                sequence.fill_(width)
+                baseline_indptr.copy_(
+                    torch.arange(rows + 1, dtype=torch.int32, device="cuda") * width
+                )
+                metadata(mode)
+                tests.append(
+                    {
+                        "mode": mode,
+                        "split": split,
+                        "trace_steps_checked": depth,
+                        "path_checked": True,
+                        "tree_order_checked": mode != "gather",
+                    }
+                )
+    summary = []
+    for mode in modes:
+        selected = min(
+            (r for r in timings if r["mode"] == mode and r["scope"] == "total"),
+            key=lambda r: r["median_us"],
+        )
+        baseline = min(
+            (r for r in timings if r["mode"] == "gather" and r["scope"] == "total"),
+            key=lambda r: r["median_us"],
+        )
+        summary.append(
+            {
+                "mode": mode,
+                "best_split": selected["split"],
+                "total_median_us": selected["median_us"],
+                "speedup_vs_best_gather": baseline["median_us"] / selected["median_us"],
+            }
+        )
+    return header | {
+        "status": "completed",
+        "torch_peak_allocated_delta_bytes": torch.cuda.max_memory_allocated()
+        - allocated_at_start,
+        "correctness": tests,
+        "timings": timings,
+        "comparisons": summary,
+        "compiled_kernels": diagnostics,
+        "grouping": group_reports,
+        "cpu_fixture_build_ms": cpu_build_ms,
+        "live_beam_nodes": [s[2] for s in snapshots],
+        "global_common_prefix": [
+            depth
+            if args.beams == 1
+            else group_prefix_oracle(slots, order, args.beams, depth, args.beams)[0]
+            for slots, order, _ in snapshots
+        ],
+        "ancestor_counts_by_depth": [
+            [len(set(slots[position::depth])) for position in range(depth)]
+            for slots, _, _ in snapshots
+        ],
+        "kv_len": depth,
+        "kv_storage_slots": cursor,
+        "group_beams": group_beams,
+        "actual_kv_bytes": sum(
+            (k.numel() + v.numel()) * k.element_size() for _, k, v, _, _ in layer_data
+        ),
+        "source_hashes": {
+            name: hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
+            for name, module in (("shared", shared), ("gather", gather))
+        },
+        "loaded_gather_sha256": gather.loaded_source_sha256,
+        "parent_trace_sha256": hashlib.sha256(
+            Path(args.parent_trace).read_bytes()
+        ).hexdigest()
+        if args.parent_trace
+        else None,
+        "auto_note": (
+            "zero-prefix groups use full suffix gather but still pay "
+            "metadata/merge launches; k=1 bypasses them"
+        ),
+        "hardware_counters": (
+            "not collected; compiler resources are not hardware bandwidth counters"
+        ),
+    }
+
+
+class TestA30Grouping(unittest.TestCase):
+    def test_parent_trace_input_validation(self):
+        valid = {"parents": [[[0, 1], [1, 1]]]}
+        actual = parse_parent_trace(valid, 1, 2, 2)
+        self.assertEqual([list(step) for step in actual[0]], valid["parents"][0])
+        for invalid in (
+            [],
+            {},
+            {"parents": [None]},
+            {"parents": [[None, [0, 1]]]},
+            {"parents": [[[0, 2], [0, 0]]]},
+            {"parents": [[[True, 0], [0, 0]]]},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                parse_parent_trace(invalid, 1, 2, 2)
+
+    def test_budget_skip_occurs_before_gpu_data_allocations(self):
+        parser = argparse.ArgumentParser()
+        add_a30_arguments(parser)
+        args = parser.parse_args(
+            ["--beams", "4096", "--output-tokens", "128", "--memory-gib", "0.01"]
+        )
+        torch = MagicMock()
+        torch.__version__ = "mock"
+        torch.cuda.get_device_capability.return_value = (8, 0)
+        torch.cuda.mem_get_info.return_value = (24 << 30, 24 << 30)
+        torch.cuda.memory_allocated.return_value = 0
+        triton = SimpleNamespace(__version__="mock")
+        with patch.dict(
+            run_a30.__globals__,
+            {
+                "load_cuda": Mock(return_value=(torch, triton, None, None)),
+                "gpu_environment": Mock(return_value={}),
+            },
+        ):
+            result = run_a30(args)
+        self.assertEqual(result["status"], "resource_skipped")
+        torch.randn.assert_not_called()
+        torch.empty.assert_not_called()
+        torch.tensor.assert_not_called()
+
+    def test_policy_validation_and_fixed_matrix_policy(self):
+        args = SimpleNamespace(policy=None, min_prefix=16, min_saved=128)
+        self.assertEqual(a30_candidate_policy(args)["min_saved"], 128)
+        args.policy = "policy.json"
+        policy = {
+            "schema": "beam-prefix-policy-v1",
+            "min_prefix": 8,
+            "min_saved": 64,
+            "query_tile": 32,
+            "suffix_splits": 2,
+        }
+        with patch.object(Path, "read_text", return_value=json.dumps(policy)):
+            self.assertEqual(a30_candidate_policy(args), policy)
+        for invalid in (
+            [],
+            policy | {"min_saved": True},
+            policy | {"query_tile": 7},
+            policy | {"unknown": 1},
+        ):
+            with (
+                patch.object(Path, "read_text", return_value=json.dumps(invalid)),
+                self.assertRaises(ValueError),
+            ):
+                a30_candidate_policy(args)
+        matrix = SimpleNamespace(
+            preset="a30-main",
+            case=None,
+            output_dir="/tmp/a30-dry",
+            python=None,
+            graph_batch=64,
+            repeats=2,
+            warmup=1,
+            policy="policy.json",
+        )
+        self.assertTrue(
+            all("--policy" in c["command"] for c in matrix_commands(matrix))
+        )
+
+    def test_prompt_and_suffix_indices_do_not_duplicate_shared_nodes(self):
+        path = [100, 101, 10, 11, 12, 13]
+        for common in range(5):
+            suffix_len = len(path) - common
+            packed = [path[i if i < 2 else i + common] for i in range(suffix_len)]
+            shared = path[2 : 2 + common]
+            self.assertEqual(sorted(packed + shared), sorted(path))
+            self.assertEqual(packed[:2], path[:2])
+
+    def test_raw_trace_snapshot_matches_forward_reparent(self):
+        for beams, pattern in itertools.product(
+            (1, 3, 6, 24), ("shared", "grouped", "independent", "random")
+        ):
+            trace = parent_trace(beams, 17, pattern, 11)
+            histories = [[] for _ in range(beams)]
+            for step, parents in enumerate(trace):
+                histories = [
+                    histories[parent] + [step * beams + row]
+                    for row, parent in enumerate(parents)
+                ]
+                paths, _, _ = trace_snapshot(trace, beams, step + 1, compact=False)
+                self.assertEqual(list(paths), [s for path in histories for s in path])
+
+    def test_tree_order_prefix_matches_all_members(self):
+        for beams, depth, pattern in itertools.product(
+            (1, 3, 6, 24), (1, 3, 17), ("shared", "grouped", "independent", "random")
+        ):
+            trace = parent_trace(beams, depth, pattern, 7)
+            paths, order, _ = trace_snapshot(trace, beams, depth)
+            self.assertEqual(sorted(order), list(range(beams)))
+            for size in (1, 2, 4, 8):
+                actual = group_prefix_oracle(paths, order, beams, depth, size)
+                for group, start in enumerate(range(0, beams, size)):
+                    members = order[start : start + size]
+                    expected = 0
+                    if len(members) > 1:
+                        while (
+                            expected < depth
+                            and len({paths[r * depth + expected] for r in members}) == 1
+                        ):
+                            expected += 1
+                    self.assertEqual(actual[group], expected)
+
+    def test_split_attention_uses_only_path_nodes(self):
+        trace = parent_trace(6, 9, "grouped", 3)
+        paths, order, size = trace_snapshot(trace, 6, 9)
+        rng = random.Random(3)
+        keys = [[rng.random() for _ in range(4)] for _ in range(size)]
+        values = [[rng.random() for _ in range(4)] for _ in range(size)]
+        q = [0.1, 0.2, -0.3, 0.4]
+        common = group_prefix_oracle(paths, order, 6, 9, 2)
+        for group, start in enumerate(range(0, 6, 2)):
+            for row in order[start : start + 2]:
+                path = paths[row * 9 : (row + 1) * 9]
+                c = common[group]
+                actual = merge_states(
+                    reference_attention(q, keys, values, path[:c]),
+                    reference_attention(q, keys, values, path[c:]),
+                )
+                expected = reference_attention(q, keys, values, path)
+                for a, b in zip(actual[0], expected[0]):
+                    self.assertAlmostEqual(a, b, places=12)
+                self.assertAlmostEqual(actual[1], expected[1], places=12)
+
+    def test_original_matrix_is_preserved(self):
+        cases = a30_cases("a30-main") + a30_cases("a30-stress")
+        pairs = {(c["beams"], c["output_tokens"]) for _, c in cases}
+        self.assertEqual(len(pairs), 80)
+        for k, n in itertools.product(
+            (1, 3, 6, 12, 24, 128, 256, 512, 1024, 2048, 4096), A30_OUTPUTS
+        ):
+            self.assertIn((k, n), pairs)
+        self.assertEqual(len(cases), 480)
+
+    def test_large_case_has_no_dense_mask(self):
+        cost = a30_memory_estimate(4096, 128, 1, 8, 8, 128, 1, 16, 4, 1)
+        self.assertEqual(cost["kv_upper_bound_bytes"], 2 << 30)
+        self.assertEqual(cost["dense_ancestry_mask_bytes"], 0)
+        self.assertLess(cost["estimated_peak_bytes"], 4 << 30)
+
+    def test_selection_thresholds_and_zero_prefix(self):
+        trace = parent_trace(6, 9, "independent", 2)
+        paths, order, _ = trace_snapshot(trace, 6, 9)
+        self.assertEqual(group_prefix_oracle(paths, order, 6, 9, 4), [0, 0])
+        trace = parent_trace(6, 9, "shared", 2)
+        paths, order, _ = trace_snapshot(trace, 6, 9)
+        self.assertEqual(
+            group_prefix_oracle(paths, order, 6, 9, 4, min_prefix=16), [0, 0]
+        )
+
+
+def add_a30_arguments(parser):
+    parser.add_argument("--beams", type=int, default=32)
+    parser.add_argument("--output-tokens", type=int, default=32)
+    parser.add_argument("--requests", type=int, default=1)
+    parser.add_argument(
+        "--pattern",
+        choices=("shared", "grouped", "independent", "random"),
+        default="shared",
+    )
+    parser.add_argument("--seed", type=int, default=43)
+    parser.add_argument("--q-heads", type=int, default=8)
+    parser.add_argument("--kv-heads", type=int, default=8)
+    parser.add_argument("--head-dim", type=int, choices=(64, 128), default=128)
+    parser.add_argument("--dtype", choices=("float16", "bfloat16"), default="float16")
+    parser.add_argument("--layers", type=int, default=1)
+    parser.add_argument("--query-tile", type=int, choices=(16, 32, 64), default=16)
+    parser.add_argument("--tile", type=int, choices=(32, 64, 128), default=32)
+    parser.add_argument("--prefix-splits", type=int, choices=(1, 2, 4, 8), default=2)
+    parser.add_argument("--warps", type=int, choices=(4, 8), default=4)
+    parser.add_argument("--stages", type=int, choices=(1, 2, 3), default=2)
+    parser.add_argument(
+        "--splits", type=int, nargs="+", choices=(1, 2, 4, 8), default=[1, 2, 4]
+    )
+    parser.add_argument("--min-prefix", type=int, default=16)
+    parser.add_argument("--min-saved", type=int, default=128)
+    parser.add_argument(
+        "--policy", help="frozen candidate policy JSON, not a per-case oracle"
+    )
+    parser.add_argument(
+        "--modes",
+        nargs="+",
+        choices=("gather", "shared", "auto"),
+        default=["gather", "shared", "auto"],
+    )
+    parser.add_argument("--memory-gib", type=float, default=16)
+    parser.add_argument("--memory-fraction", type=float, default=0.7)
+    parser.add_argument("--reference-rows", type=int, default=1)
+    parser.add_argument("--prompt-len", type=int, default=0)
+    parser.add_argument("--trace", action="store_true")
+    parser.add_argument(
+        "--parent-trace", help="JSON parents[request][step][beam] from a real model"
+    )
+    parser.add_argument("--execution", choices=("graph", "eager"), default="graph")
+    parser.add_argument("--graph-batch", type=int, default=64)
+    parser.add_argument("--warmup", type=int, default=5)
+    parser.add_argument("--repeats", type=int, default=20)
+    parser.add_argument("--cache-mode", choices=("warm", "scrub"), default="warm")
+    parser.add_argument("--eviction-mib", type=int, default=256)
+    parser.add_argument("--output")
+    parser.add_argument("--dump-dir")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="mode", required=True)
@@ -2168,11 +3513,28 @@ def main(argv=None):
             "benchmark", help="compare existing gather and shared-tile CUDA kernels"
         )
     )
+    add_a30_arguments(
+        subparsers.add_parser(
+            "a30-case", help="grouped-prefix attention with budgeted storage"
+        )
+    )
     matrix = subparsers.add_parser(
-        "matrix", help="run a staged V100 matrix in isolated processes"
+        "matrix", help="run staged GPU experiments in isolated processes"
     )
     matrix.add_argument(
-        "--preset", choices=("quick", "full", "v100-tune", "compiler"), default="quick"
+        "--preset",
+        choices=(
+            "quick",
+            "full",
+            "v100-tune",
+            "compiler",
+            "a30-smoke",
+            "a30-calibrate",
+            "a30-main",
+            "a30-stress",
+            "a30-trace",
+        ),
+        default="quick",
     )
     matrix.add_argument(
         "--python",
@@ -2189,6 +3551,9 @@ def main(argv=None):
     matrix.add_argument(
         "--dry-run", action="store_true", help="print commands without importing CUDA"
     )
+    matrix.add_argument(
+        "--policy", help="frozen A30 policy shared by every matrix case"
+    )
     matrix.add_argument("--graph-batch", type=int, default=64)
     matrix.add_argument("--warmup", type=int, default=10)
     matrix.add_argument("--repeats", type=int, default=30)
@@ -2198,15 +3563,15 @@ def main(argv=None):
     if args.mode == "self-test":
         suite = unittest.TestSuite(
             unittest.defaultTestLoader.loadTestsFromTestCase(test_case)
-            for test_case in (TestBeamKVCPU, TestBenchmarkHarness)
+            for test_case in (TestBeamKVCPU, TestBenchmarkHarness, TestA30Grouping)
         )
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         return 0 if result.wasSuccessful() else 1
     try:
-        if args.mode in ("gpu-check", "benchmark"):
+        if args.mode in ("gpu-check", "benchmark", "a30-case"):
             if args.output and Path(args.output).exists():
                 raise ValueError("output file already exists; select a new path")
-            result = run_gpu(args)
+            result = run_a30(args) if args.mode == "a30-case" else run_gpu(args)
         elif args.mode == "matrix":
             result = run_matrix(args)
         else:
@@ -2220,7 +3585,7 @@ def main(argv=None):
             if args.history:
                 result["history"] = snapshot.trace
         output = json.dumps(result, indent=2, allow_nan=False)
-        if args.mode in ("gpu-check", "benchmark") and args.output:
+        if args.mode in ("gpu-check", "benchmark", "a30-case") and args.output:
             target = Path(args.output)
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("x") as stream:
