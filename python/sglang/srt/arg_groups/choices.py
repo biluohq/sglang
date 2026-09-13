@@ -82,6 +82,7 @@ ATTENTION_BACKEND_CHOICES = [
     "dsv4",
     "compressed",  # Deprecated alias for "dsv4"
     # NVIDIA specific
+    "beam_triton",
     "cutlass_mla",
     "fa3",
     "fa4",

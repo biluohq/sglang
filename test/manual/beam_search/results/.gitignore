@@ -1,8 +1,6 @@
-# Keep generated kernel dumps local.
-*.cubin
-*.ptx
-*.sass
-*.ttgir
-
-# Preserve A30 validation logs despite the repository-wide *.log rule.
-!/a30_*/**/*.log
+*
+!.gitignore
+!a30_beam_triton_20260914/
+!a30_beam_triton_20260914/*.json
+!a30_beam_triton_20260914/SUMMARY.md
+!a30_beam_triton_20260914/environment.txt

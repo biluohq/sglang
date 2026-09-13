@@ -1,2 +1,0 @@
-name, driver_version, mig.mode.current, memory.total [MiB], memory.free [MiB], power.limit [W], clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%]
-NVIDIA A30, 535.161.08, Disabled, 24576 MiB, 24062 MiB, 165.00 W, 1440 MHz, 1215 MHz, 0 %

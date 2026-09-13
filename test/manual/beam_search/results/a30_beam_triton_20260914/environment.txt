@@ -1,0 +1,2 @@
+NVIDIA A30, 535.161.08, 24576 MiB, Disabled
+torch=2.7.1 cuda=12.6 triton=3.4.0 transformers=5.12.1

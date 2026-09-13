@@ -200,6 +200,20 @@ def create_triton_backend(runner):
     return TritonAttnBackend(runner)
 
 
+@register_attention_backend("beam_triton")
+def create_beam_triton_backend(runner):
+    assert not runner.model_config.is_encoder_decoder, (
+        "Cross attention is not supported in the beam_triton attention backend."
+    )
+    if _is_hip or _is_musa or _is_npu:
+        raise ValueError("beam_triton currently requires NVIDIA CUDA.")
+    from sglang.srt.layers.attention.beam_triton_backend import (
+        BeamTritonAttnBackend,
+    )
+
+    return BeamTritonAttnBackend(runner)
+
+
 @register_attention_backend("torch_native")
 def create_torch_native_backend(runner):
     from sglang.srt.layers.attention.torch_native_backend import TorchNativeAttnBackend

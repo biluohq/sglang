@@ -1,0 +1,88 @@
+{
+  "status": "completed",
+  "parameters": {
+    "command": "benchmark",
+    "beams": 8,
+    "requests": 1,
+    "seq_len": 128,
+    "shared_prefix": 127,
+    "q_heads": 8,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "dtype": "float16",
+    "layers": 32,
+    "group_beams": null,
+    "execution": "graph",
+    "graph_batch": 8,
+    "cache_mode": "warm",
+    "eviction_mib": 256,
+    "warmup": 3,
+    "repeats": 7,
+    "reference_rows": 2,
+    "seed": 43,
+    "output": "/tmp/mha_k8_boundary.json"
+  },
+  "gpu": "NVIDIA A30",
+  "torch": "2.7.1",
+  "triton": "3.4.0",
+  "correctness": {
+    "reference_rows": 2,
+    "max_output_abs_error": 0.00025853876011805443,
+    "max_lse_abs_error": 6.810370880572236e-05
+  },
+  "layout": {
+    "rows": 8,
+    "groups": 1,
+    "group_beams": 8,
+    "shared_prefix": 127,
+    "suffix_len": 1,
+    "baseline_kv_references": 1024,
+    "beam_kv_references": 135,
+    "production_backend_eligible": false
+  },
+  "measurements": {
+    "baseline_kernel": {
+      "median_us": 595.0040221214294,
+      "p10_us": 594.3160057067871,
+      "p90_us": 595.1640009880066
+    },
+    "beam_kernel": {
+      "median_us": 581.0239911079407,
+      "p10_us": 580.1119804382324,
+      "p90_us": 581.0800194740295
+    },
+    "beam_prefix_stage": {
+      "median_us": 8.667999878525734,
+      "p10_us": 8.588000200688839,
+      "p90_us": 8.72000027447939
+    },
+    "beam_suffix_stage": {
+      "median_us": 6.492000073194504,
+      "p10_us": 6.428000051528215,
+      "p90_us": 6.575999781489372
+    },
+    "beam_merge_stage": {
+      "median_us": 2.3479999508708715,
+      "p10_us": 2.3040000814944506,
+      "p90_us": 2.4319998919963837
+    },
+    "baseline_route_e2e": {
+      "median_us": 598.4399914741516,
+      "p10_us": 598.0719923973083,
+      "p90_us": 598.688006401062
+    },
+    "beam_route_e2e": {
+      "median_us": 595.0919985771179,
+      "p10_us": 594.5760011672974,
+      "p90_us": 595.2919721603394
+    }
+  },
+  "speedup": {
+    "kernel": 1.024061021967149,
+    "route_e2e": 1.0056260089280966
+  },
+  "scope": {
+    "kernel": "prebuilt metadata; complete attention output",
+    "route_e2e": "common row-wise paths -> KV metadata -> complete attention output"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "status": "completed",
+  "parameters": {
+    "command": "benchmark",
+    "beams": 1024,
+    "requests": 1,
+    "seq_len": 128,
+    "shared_prefix": 127,
+    "q_heads": 8,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "dtype": "float16",
+    "layers": 8,
+    "group_beams": null,
+    "execution": "graph",
+    "graph_batch": 8,
+    "cache_mode": "warm",
+    "eviction_mib": 256,
+    "warmup": 3,
+    "repeats": 7,
+    "reference_rows": 2,
+    "seed": 43,
+    "output": "/tmp/beam_large_k1024_l8.json"
+  },
+  "gpu": "NVIDIA A30",
+  "torch": "2.7.1",
+  "triton": "3.4.0",
+  "correctness": {
+    "reference_rows": 2,
+    "max_output_abs_error": 0.0002619463660563648,
+    "max_lse_abs_error": 3.640805004323511e-05
+  },
+  "layout": {
+    "rows": 1024,
+    "groups": 64,
+    "group_beams": 16,
+    "shared_prefix": 127,
+    "suffix_len": 1,
+    "baseline_kv_references": 131072,
+    "beam_kv_references": 9152,
+    "production_backend_eligible": true
+  },
+  "measurements": {
+    "baseline_kernel": {
+      "median_us": 3705.183982849121,
+      "p10_us": 3704.479932785034,
+      "p90_us": 3724.8120307922363
+    },
+    "beam_kernel": {
+      "median_us": 2162.9159450531006,
+      "p10_us": 2149.3918895721436,
+      "p90_us": 2163.844108581543
+    },
+    "beam_prefix_stage": {
+      "median_us": 32.35600143671036,
+      "p10_us": 32.06399828195572,
+      "p90_us": 32.40799903869629
+    },
+    "beam_suffix_stage": {
+      "median_us": 215.8840000629425,
+      "p10_us": 215.7839983701706,
+      "p90_us": 215.95600247383118
+    },
+    "beam_merge_stage": {
+      "median_us": 15.884000808000565,
+      "p10_us": 15.81599935889244,
+      "p90_us": 15.939999371767044
+    },
+    "baseline_route_e2e": {
+      "median_us": 3734.0519428253174,
+      "p10_us": 3733.3920001983643,
+      "p90_us": 3734.636068344116
+    },
+    "beam_route_e2e": {
+      "median_us": 2169.1479682922363,
+      "p10_us": 2168.0920124053955,
+      "p90_us": 2169.451951980591
+    }
+  },
+  "speedup": {
+    "kernel": 1.7130503805861754,
+    "route_e2e": 1.7214371713724652
+  },
+  "scope": {
+    "kernel": "prebuilt metadata; complete attention output",
+    "route_e2e": "common row-wise paths -> KV metadata -> complete attention output"
+  }
+}

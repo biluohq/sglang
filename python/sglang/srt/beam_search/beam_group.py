@@ -110,6 +110,10 @@ class BeamGroup:
         # Running total the GC has returned, so held KV is a host-side
         # arithmetic (allocated - freed) rather than a tensor read.
         self.slots_freed = 0
+        # Parent ids for the current physical frontier. A beam-aware attention
+        # backend can group equal parents without scanning KV mappings.
+        self.attention_parent_indices: Optional[List[int]] = None
+        self.attention_prefix_len = 0
 
     @property
     def num_member_rows(self) -> int:
@@ -185,6 +189,11 @@ class BeamGroup:
 
         surv_tokens = sel.next_tokens[:num_survivors].tolist()
         surv_parents = sel.parent_idx[:num_survivors].tolist()
+        if num_survivors == self.beam_width:
+            self.attention_parent_indices = surv_parents
+            # The next decode row adds one private token after this shared
+            # parent history.
+            self.attention_prefix_len = self.prompt_len + new_len - 1
         self.leaves = [
             BeamNode(token, self.leaves[parent])
             for token, parent in zip(surv_tokens, surv_parents)

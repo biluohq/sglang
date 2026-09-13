@@ -1,6 +1,0 @@
-[1/4] single
-[2/4] mha_tail
-usage: test_beam_kv_attention.py [-h]
-                                 {self-test,simulate,gpu-check,benchmark,a30-case,matrix}
-                                 ...
-test_beam_kv_attention.py: error: matrix stopped at mha_tail; inspect /mlx_devbox/users/zengjun.17/playground/sglang/test/manual/beam_search/results/a30_20260913_050641/smoke/mha_tail.log
